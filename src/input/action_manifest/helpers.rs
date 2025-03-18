@@ -2,11 +2,12 @@ use crate::input::action_manifest::{ActionPath, ControllerType, LoadedActionData
 use crate::input::custom_bindings::{
     AsActionData, AsIter, BindingData, CustomBindingHelper, Names,
 };
+use crate::input::devices::TrackedDeviceList;
 use crate::input::skeletal::SkeletalInputActionData;
 use crate::input::ActionData::{Bool, Vector1, Vector2};
 use crate::input::{ActionData, BoundPose, ExtraActionData, InteractionProfile};
-use crate::openxr_data;
 use crate::openxr_data::OpenXrData;
+use crate::openxr_data::{self, Hand};
 use log::{trace, warn};
 use openxr as xr;
 use std::collections::HashMap;
@@ -47,6 +48,7 @@ impl BindingsLoadContext<'_> {
     pub fn for_profile<'a, 'b: 'a, C: openxr_data::Compositor>(
         &'b mut self,
         openxr: &'a OpenXrData<C>,
+        devices: &'a TrackedDeviceList,
         profile: &'a dyn InteractionProfile,
         controller_type: &'a ControllerType,
     ) -> Option<BindingsProfileLoadContext<'a>> {
@@ -56,10 +58,10 @@ impl BindingsLoadContext<'_> {
             return None;
         };
 
-        let hands = [
-            openxr.left_hand.subaction_path,
-            openxr.right_hand.subaction_path,
-        ];
+        let left_hand = devices.get_controller(Hand::Left.into());
+        let right_hand = devices.get_controller(Hand::Right.into());
+
+        let hands = [left_hand.subaction_path, right_hand.subaction_path];
 
         let bindings_parsed = self
             .per_profile_bindings

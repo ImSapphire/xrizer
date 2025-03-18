@@ -800,7 +800,7 @@ impl vr::IVRCompositor028_Interface for Compositor {
         let input = self.input.force(|_| Input::new(self.openxr.clone()));
 
         let pose = match device_index {
-            vr::k_unTrackedDeviceIndex_Hmd => input.get_hmd_pose(None),
+            vr::k_unTrackedDeviceIndex_Hmd => input.get_device_pose(0, None),
             x if x == openxr_data::Hand::Left as u32 => {
                 input.get_controller_pose(openxr_data::Hand::Left, None)
             }

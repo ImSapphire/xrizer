@@ -40,10 +40,15 @@ impl<C: openxr_data::Compositor> Input<C> {
 
         let session_data = self.openxr.session_data.get();
         let session = &session_data.session;
+
+        let devices = self.devices.read().unwrap();
+        let left_hand = devices.get_controller(Hand::Left.into());
+        let right_hand = devices.get_controller(Hand::Right.into());
+
         let legacy = LegacyActionData::new(
             &self.openxr.instance,
-            self.openxr.left_hand.subaction_path,
-            self.openxr.right_hand.subaction_path,
+            left_hand.subaction_path,
+            right_hand.subaction_path,
         );
         let input_data = &session_data.input_data;
 
@@ -102,11 +107,9 @@ impl<C: openxr_data::Compositor> Input<C> {
             debug!("tried triggering haptic on invalid device index: {device_index}");
             return;
         };
-        let hand_info = match hand {
-            Hand::Left => &self.openxr.left_hand,
-            Hand::Right => &self.openxr.right_hand,
-        };
-        let hand_path = hand_info.subaction_path;
+        let devices = self.devices.read().unwrap();
+        let controller = devices.get_controller(hand.into());
+        let hand_path = controller.subaction_path;
 
         let Some(legacy) = data.input_data.get_legacy_actions() else {
             debug!("tried triggering haptic, but legacy actions aren't ready");
@@ -171,11 +174,11 @@ impl<C: openxr_data::Compositor> Input<C> {
             return false;
         };
 
-        let hand_info = match hand {
-            Hand::Left => &self.openxr.left_hand,
-            Hand::Right => &self.openxr.right_hand,
-        };
-        let hand_path = hand_info.subaction_path;
+        let devices = self.devices.read().unwrap();
+
+        let controller = devices.get_controller(hand.into());
+
+        let hand_path = controller.subaction_path;
 
         let data = self.openxr.session_data.get();
 

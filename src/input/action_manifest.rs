@@ -99,14 +99,18 @@ impl<C: openxr_data::Compositor> Input<C> {
         )?;
         debug!("Loaded {} action sets.", sets.len());
 
+        let devices = self.devices.read().unwrap();
+        let left_hand = devices.get_controller(Hand::Left.into());
+        let right_hand = devices.get_controller(Hand::Right.into());
+
         let actions = load_actions(
             &self.openxr.instance,
             &session_data.session,
             english.as_ref(),
             &mut sets,
             manifest.actions,
-            self.openxr.left_hand.subaction_path,
-            self.openxr.right_hand.subaction_path,
+            left_hand.subaction_path,
+            right_hand.subaction_path,
         )?;
         debug!("Loaded {} actions.", actions.len());
 
@@ -116,8 +120,8 @@ impl<C: openxr_data::Compositor> Input<C> {
             .get_or_init(|| {
                 SkeletalInputActionData::new(
                     &self.openxr.instance,
-                    self.openxr.left_hand.subaction_path,
-                    self.openxr.right_hand.subaction_path,
+                    left_hand.subaction_path,
+                    right_hand.subaction_path,
                 )
             });
 
@@ -864,9 +868,12 @@ impl<C: openxr_data::Compositor> Input<C> {
                     let bindings = LazyCell::new(load_bindings);
                     for profile in profiles {
                         if let Some(bindings) = bindings.as_ref() {
-                            if let Some(mut context) =
-                                context.for_profile(&self.openxr, profile, other)
-                            {
+                            if let Some(mut context) = context.for_profile(
+                                &self.openxr,
+                                &self.devices.read().unwrap(),
+                                profile,
+                                other,
+                            ) {
                                 self.load_bindings_for_profile(bindings, &mut context);
                             }
                         }
