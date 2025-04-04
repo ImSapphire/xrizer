@@ -184,10 +184,10 @@ impl<C: Compositor> OpenXrData<C> {
                     let xr_input = self.input.get().unwrap();
 
                     let devices = xr_input.devices.read().unwrap();
+                    let hmd = devices.get_hmd();
 
                     for hand in [TrackedDeviceType::LeftHand, TrackedDeviceType::RightHand] {
                         let controller = devices.get_controller(hand);
-                        let hmd = devices.get_hmd();
 
                         let profile_path = session_data
                             .session
