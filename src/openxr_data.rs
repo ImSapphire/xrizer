@@ -1,10 +1,6 @@
 use crate::{
     clientcore::{Injected, Injector},
     graphics_backends::{supported_apis_enum, GraphicsBackend, VulkanData},
-    input::{
-        devices::tracked_device::{TrackedDevice, TrackedDeviceType},
-        Profiles,
-    },
 };
 use derive_more::Deref;
 use glam::f32::{Quat, Vec3};
@@ -177,52 +173,8 @@ impl<C: Compositor> OpenXrData<C> {
                     info!("OpenXR session state changed: {:?}", event.state());
                 }
                 xr::Event::InteractionProfileChanged(_) => {
-                    if self.input.get().is_none() {
-                        continue;
-                    }
-
-                    let xr_input = self.input.get().unwrap();
-
-                    let devices = xr_input.devices.read().unwrap();
-                    let hmd = devices.get_hmd();
-
-                    for hand in [TrackedDeviceType::LeftHand, TrackedDeviceType::RightHand] {
-                        let controller = devices.get_controller(hand);
-
-                        let profile_path = session_data
-                            .session
-                            .current_interaction_profile(controller.subaction_path)
-                            .unwrap();
-
-                        controller
-                            .get_base_device()
-                            .profile_path
-                            .store(profile_path);
-
-                        let profile_name = match profile_path {
-                            xr::Path::NULL => {
-                                controller.set_connected(false);
-                                "<null>".to_owned()
-                            }
-                            path => {
-                                controller.set_connected(true);
-                                self.instance.path_to_string(path).unwrap()
-                            }
-                        };
-
-                        let profile = Profiles::get().profile_from_name(&profile_name);
-
-                        if let Some(p) = profile {
-                            controller.set_interaction_profile(p);
-                            hmd.set_interaction_profile(p);
-                        };
-
-                        session_data.input_data.interaction_profile_changed();
-
-                        info!(
-                            "{} interaction profile changed: {}",
-                            controller.hand_path, profile_name
-                        )
+                    if let Some(input) = self.input.get() {
+                        input.interaction_profile_changed();
                     }
                 }
                 _ => {
@@ -662,7 +614,7 @@ impl AtomicPath {
         xr::Path::from_raw(self.0.load(Ordering::Relaxed))
     }
 
-    fn store(&self, path: xr::Path) {
+    pub(crate) fn store(&self, path: xr::Path) {
         self.0.store(path.into_raw(), Ordering::Relaxed);
     }
 }
