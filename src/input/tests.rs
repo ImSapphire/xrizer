@@ -7,7 +7,6 @@ use super::{
 };
 use crate::{
     input::ActionKey,
-    input::devices::tracked_device::TrackedDevice,
     openxr_data::{FakeCompositor, Hand, OpenXrData},
     vr::{self, IVRInput010_Interface},
 };
