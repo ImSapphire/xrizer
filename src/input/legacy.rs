@@ -47,11 +47,8 @@ impl<C: openxr_data::Compositor> Input<C> {
 
         let legacy = LegacyActionData::new(
             &self.openxr.instance,
-            left_hand.get_controller_variables().unwrap().subaction_path,
-            right_hand
-                .get_controller_variables()
-                .unwrap()
-                .subaction_path,
+            left_hand.get_controller_subaction_path().unwrap(),
+            right_hand.get_controller_subaction_path().unwrap(),
         );
         let input_data = &session_data.input_data;
 
@@ -111,10 +108,10 @@ impl<C: openxr_data::Compositor> Input<C> {
             return;
         };
         let devices = self.devices.read().unwrap();
-        let controller = devices.get_controller(hand.into());
-        let hand_path = controller.get_controller_variables()
-            .unwrap()
-            .subaction_path;
+        let hand_path = devices
+            .get_controller(hand)
+            .get_controller_subaction_path()
+            .unwrap();
 
         let Some(legacy) = data.input_data.get_legacy_actions() else {
             debug!("tried triggering haptic, but legacy actions aren't ready");
@@ -181,12 +178,10 @@ impl<C: openxr_data::Compositor> Input<C> {
 
         let devices = self.devices.read().unwrap();
 
-        let Some(controller) = devices.get_controller(hand).get_controller_variables() else {
+        let Some(hand_path) = devices.get_controller(hand).get_controller_subaction_path() else {
             debug!("tried getting controller state, but no controller variables were found");
             return false;
         };
-
-        let hand_path = controller.subaction_path;
 
         let data = self.openxr.session_data.get();
 

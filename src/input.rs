@@ -116,19 +116,16 @@ impl<C: openxr_data::Compositor> Input<C> {
             })
             .collect();
 
-        let left_hand = devices
-            .get_controller(Hand::Left)
-            .get_controller_variables()
-            .unwrap();
-        let right_hand = devices
-            .get_controller(Hand::Right)
-            .get_controller_variables()
-            .unwrap();
-
         let pose_data = PoseData::new(
             &openxr.instance,
-            left_hand.subaction_path,
-            right_hand.subaction_path,
+            devices
+                .get_controller(Hand::Left)
+                .get_controller_subaction_path()
+                .unwrap(),
+            devices
+                .get_controller(Hand::Right)
+                .get_controller_subaction_path()
+                .unwrap(),
         );
         openxr
             .session_data
@@ -166,16 +163,13 @@ impl<C: openxr_data::Compositor> Input<C> {
         } else {
             let devices = self.devices.read().ok()?;
 
-            let left_hand = devices
-                .get_controller(Hand::Left)
-                .get_controller_variables()?;
-            let right_hand = devices
-                .get_controller(Hand::Right)
-                .get_controller_variables()?;
-
             match InputSourceKey::from(KeyData::from_ffi(handle)) {
-                x if x == self.left_hand_key => Some(left_hand.subaction_path),
-                x if x == self.right_hand_key => Some(right_hand.subaction_path),
+                x if x == self.left_hand_key => devices
+                    .get_controller(Hand::Left)
+                    .get_controller_subaction_path(),
+                x if x == self.right_hand_key => devices
+                    .get_controller(Hand::Right)
+                    .get_controller_subaction_path(),
                 _ => None,
             }
         }
@@ -780,15 +774,10 @@ impl<C: openxr_data::Compositor> vr::IVRInput010_Interface for Input<C> {
         let (active_origin, hand) = match loaded.try_get_action(action) {
             Ok(ActionData::Pose) => {
                 let (mut hand, interaction_profile) = match subaction_path {
-                    x if x == left_hand.get_controller_variables().unwrap().subaction_path => {
+                    x if x == left_hand.get_controller_subaction_path().unwrap() => {
                         (Some(Hand::Left), Some(left_hand.profile_path.load()))
                     }
-                    x if x
-                        == right_hand
-                            .get_controller_variables()
-                            .unwrap()
-                            .subaction_path =>
-                    {
+                    x if x == right_hand.get_controller_subaction_path().unwrap() => {
                         (Some(Hand::Right), Some(right_hand.profile_path.load()))
                     }
                     x if x == xr::Path::NULL => (None, None),
@@ -1330,11 +1319,11 @@ impl<C: openxr_data::Compositor> Input<C> {
 
         for hand in [Hand::Left, Hand::Right] {
             let controller = devices.get_controller(hand);
-            let vars = controller.get_controller_variables().unwrap();
+            let subaction_path = controller.get_controller_subaction_path().unwrap();
 
             let profile_path = session
                 .session
-                .current_interaction_profile(vars.subaction_path)
+                .current_interaction_profile(subaction_path)
                 .unwrap();
 
             controller.profile_path.store(profile_path);
@@ -1361,7 +1350,7 @@ impl<C: openxr_data::Compositor> Input<C> {
 
             info!(
                 "{} interaction profile changed: {}",
-                HandPath::from(vars.hand),
+                HandPath::from(hand),
                 profile_name
             )
         }
@@ -1518,23 +1507,20 @@ impl<C: openxr_data::Compositor> Input<C> {
     pub fn post_session_restart(&self, data: &SessionData) {
         let devices = self.devices.read().unwrap();
 
-        let left_hand = devices
-            .get_controller(Hand::Left)
-            .get_controller_variables()
-            .unwrap();
-        let right_hand = devices
-            .get_controller(Hand::Right)
-            .get_controller_variables()
-            .unwrap();
-
         // This function is called while a write lock is called on the session, and as such should
         // not use self.openxr.session_data.get().
         data.input_data
             .pose_data
             .set(PoseData::new(
                 &self.openxr.instance,
-                left_hand.subaction_path,
-                right_hand.subaction_path,
+                devices
+                    .get_controller(Hand::Left)
+                    .get_controller_subaction_path()
+                    .unwrap(),
+                devices
+                    .get_controller(Hand::Right)
+                    .get_controller_subaction_path()
+                    .unwrap(),
             ))
             .unwrap_or_else(|_| panic!("PoseData already setup"));
         if let Some(path) = self.loaded_actions_path.get() {
@@ -1568,16 +1554,15 @@ impl<C: openxr_data::Compositor> Input<C> {
                 // VREvent_t can be different sizes depending on the OpenVR version,
                 // so we use raw pointers to avoid creating a reference, because if the
                 // size doesn't match our VREvent_t's size, we are in UB land
-                unsafe {
-                    (&raw mut (*out).eventType).write(if current {
-                        vr::EVREventType::TrackedDeviceActivated as u32
+                self.events.lock().unwrap().push_back(InputEvent {
+                    ty: if current {
+                        vr::EVREventType::TrackedDeviceActivated
                     } else {
-                        vr::EVREventType::TrackedDeviceDeactivated as u32
-                    });
-
-                    (&raw mut (*out).trackedDeviceIndex).write(i as vr::TrackedDeviceIndex_t);
-                    (&raw mut (*out).eventAgeSeconds).write(0.0);
-                }
+                        vr::EVREventType::TrackedDeviceDeactivated
+                    },
+                    index: i as vr::TrackedDeviceIndex_t,
+                    data: Default::default(),
+                });
                 return true;
             }
         }

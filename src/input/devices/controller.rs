@@ -7,34 +7,6 @@ use super::tracked_device::{TrackedDeviceType, XrTrackedDevice};
 
 use log::trace;
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct ControllerVariables {
-    pub hand: Hand,
-    pub subaction_path: xr::Path,
-}
-
-impl Default for ControllerVariables {
-    fn default() -> Self {
-        Self {
-            hand: Hand::Left,
-            subaction_path: xr::Path::default(),
-        }
-    }
-}
-
-impl ControllerVariables {
-    pub fn new(instance: &xr::Instance, hand: Hand) -> Self {
-
-        Self {
-            hand,
-            subaction_path: match hand {
-                Hand::Left => instance.string_to_path(hand.into()).unwrap(),
-                Hand::Right => instance.string_to_path(hand.into()).unwrap(),
-            },
-        }
-    }
-}
-
 impl XrTrackedDevice {
     pub fn get_controller_pose(
         &self,
@@ -43,7 +15,7 @@ impl XrTrackedDevice {
         origin: vr::ETrackingUniverseOrigin,
     ) -> Option<vr::TrackedDevicePose_t> {
         let pose_data = session_data.input_data.pose_data.get().unwrap();
-        let space = match self.get_controller_variables()?.hand {
+        let space = match self.get_controller_hand()? {
             Hand::Left => &pose_data.left_space,
             Hand::Right => &pose_data.right_space,
         };
@@ -66,11 +38,17 @@ impl XrTrackedDevice {
         Some(vr::space_relation_to_openvr_pose(location, velocity))
     }
 
-    pub fn get_controller_variables(&self) -> Option<ControllerVariables> {
-        if let TrackedDeviceType::Controller(vars) = self.device_type {
-            Some(vars)
-        } else {
-            None
+    pub fn get_controller_subaction_path(&self) -> Option<xr::Path> {
+        match self.device_type {
+            TrackedDeviceType::Controller { subaction_path, .. } => Some(subaction_path),
+            _ => None,
+        }
+    }
+
+    pub fn get_controller_hand(&self) -> Option<Hand> {
+        match self.device_type {
+            TrackedDeviceType::Controller { hand, .. } => Some(hand),
+            _ => None,
         }
     }
 }
