@@ -1362,9 +1362,13 @@ impl<C: openxr_data::Compositor> Input<C> {
         tracy_span!();
         let data = self.openxr.session_data.get();
         let input_data = &data.input_data;
-        if let Some(loaded) = input_data.get_loaded_actions() {
-            let devices = self.devices.read().unwrap();
+        let devices = self.devices.read().unwrap();
 
+        devices.iter().for_each(|device| {
+            device.clear_pose_cache();
+        });
+
+        if let Some(loaded) = input_data.get_loaded_actions() {
             let left_hand = devices.get_controller(Hand::Left);
             let right_hand = devices.get_controller(Hand::Right);
 
