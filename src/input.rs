@@ -58,6 +58,7 @@ pub struct Input<C: openxr_data::Compositor> {
     skeletal_tracking_level: RwLock<vr::EVRSkeletalTrackingLevel>,
     profile_map: HashMap<xr::Path, &'static profiles::ProfileProperties>,
     estimated_finger_state: [Mutex<FingerState>; 2],
+    subaction_paths: [Mutex<xr::Path>; 2],
     events: Mutex<VecDeque<InputEvent>>,
     loading_actions: AtomicBool,
     devices: RwLock<TrackedDeviceList>,
@@ -99,7 +100,7 @@ impl<T> Drop for WriteOnDrop<T> {
 
 impl<C: openxr_data::Compositor> Input<C> {
     pub fn new(openxr: Arc<OpenXrData<C>>) -> Self {
-        let devices = TrackedDeviceList::new(&openxr.instance);
+        let devices = TrackedDeviceList::new();
         let mut map = SlotMap::with_key();
         let left_hand_key = map.insert(c"/user/hand/left".into());
         let right_hand_key = map.insert(c"/user/hand/right".into());
@@ -116,16 +117,15 @@ impl<C: openxr_data::Compositor> Input<C> {
             })
             .collect();
 
+        let subaction_paths = [
+            Mutex::new(openxr.instance.string_to_path("/user/hand/left").unwrap()),
+            Mutex::new(openxr.instance.string_to_path("/user/hand/right").unwrap()),
+        ];
+
         let pose_data = PoseData::new(
             &openxr.instance,
-            devices
-                .get_controller(Hand::Left)
-                .get_controller_subaction_path()
-                .unwrap(),
-            devices
-                .get_controller(Hand::Right)
-                .get_controller_subaction_path()
-                .unwrap(),
+            subaction_paths[0].lock().unwrap().clone(),
+            subaction_paths[1].lock().unwrap().clone(),
         );
         openxr
             .session_data
@@ -152,8 +152,16 @@ impl<C: openxr_data::Compositor> Input<C> {
                 Mutex::new(FingerState::new()),
                 Mutex::new(FingerState::new()),
             ],
+            subaction_paths,
             events: Mutex::default(),
             loading_actions: false.into(),
+        }
+    }
+
+    pub fn get_subaction_path(&self, hand: Hand) -> xr::Path {
+        match hand {
+            Hand::Left => self.subaction_paths[0].lock().unwrap().clone(),
+            Hand::Right => self.subaction_paths[1].lock().unwrap().clone(),
         }
     }
 
@@ -161,15 +169,9 @@ impl<C: openxr_data::Compositor> Input<C> {
         if handle == vr::k_ulInvalidInputValueHandle {
             Some(xr::Path::NULL)
         } else {
-            let devices = self.devices.read().ok()?;
-
             match InputSourceKey::from(KeyData::from_ffi(handle)) {
-                x if x == self.left_hand_key => devices
-                    .get_controller(Hand::Left)
-                    .get_controller_subaction_path(),
-                x if x == self.right_hand_key => devices
-                    .get_controller(Hand::Right)
-                    .get_controller_subaction_path(),
+                x if x == self.left_hand_key => Some(self.get_subaction_path(Hand::Left)),
+                x if x == self.right_hand_key => Some(self.get_subaction_path(Hand::Right)),
                 _ => None,
             }
         }
@@ -774,10 +776,10 @@ impl<C: openxr_data::Compositor> vr::IVRInput010_Interface for Input<C> {
         let (active_origin, hand) = match loaded.try_get_action(action) {
             Ok(ActionData::Pose) => {
                 let (mut hand, interaction_profile) = match subaction_path {
-                    x if x == left_hand.get_controller_subaction_path().unwrap() => {
+                    x if x == self.get_subaction_path(Hand::Left) => {
                         (Some(Hand::Left), Some(left_hand.get_profile_path()))
                     }
-                    x if x == right_hand.get_controller_subaction_path().unwrap() => {
+                    x if x == self.get_subaction_path(Hand::Right) => {
                         (Some(Hand::Right), Some(right_hand.get_profile_path()))
                     }
                     x if x == xr::Path::NULL => (None, None),
@@ -1319,7 +1321,7 @@ impl<C: openxr_data::Compositor> Input<C> {
 
         for hand in [Hand::Left, Hand::Right] {
             let controller = devices.get_controller(hand);
-            let subaction_path = controller.get_controller_subaction_path().unwrap();
+            let subaction_path = self.get_subaction_path(hand);
 
             let profile_path = session
                 .session
@@ -1504,22 +1506,14 @@ impl<C: openxr_data::Compositor> Input<C> {
     }
 
     pub fn post_session_restart(&self, data: &SessionData) {
-        let devices = self.devices.read().unwrap();
-
         // This function is called while a write lock is called on the session, and as such should
         // not use self.openxr.session_data.get().
         data.input_data
             .pose_data
             .set(PoseData::new(
                 &self.openxr.instance,
-                devices
-                    .get_controller(Hand::Left)
-                    .get_controller_subaction_path()
-                    .unwrap(),
-                devices
-                    .get_controller(Hand::Right)
-                    .get_controller_subaction_path()
-                    .unwrap(),
+                self.get_subaction_path(Hand::Left),
+                self.get_subaction_path(Hand::Right),
             ))
             .unwrap_or_else(|_| panic!("PoseData already setup"));
         if let Some(path) = self.loaded_actions_path.get() {

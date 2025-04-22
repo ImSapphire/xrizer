@@ -449,14 +449,14 @@ impl vr::IVRSystem022_Interface for System {
             return false;
         };
 
-            let got_event = input.get_next_event(size, event);
-            if got_event && !pose.is_null() {
-                unsafe {
-                    let index = (&raw const (*event).trackedDeviceIndex).read();
-                    pose.write(input.get_device_pose(index, Some(origin)));
-                }
+        let got_event = input.get_next_event(size, event);
+        if got_event && !pose.is_null() {
+            unsafe {
+                let index = (&raw const (*event).trackedDeviceIndex).read();
+                pose.write(input.get_device_pose(index, Some(origin)));
             }
-            got_event
+        }
+        got_event
     }
 
     fn PollNextEvent(&self, event: *mut vr::VREvent_t, size: u32) -> bool {
