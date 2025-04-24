@@ -11,7 +11,6 @@ mod tests;
 
 use devices::SubactionPaths;
 use devices::TrackedDeviceList;
-use profiles::MainAxisType;
 pub use profiles::{InteractionProfile, Profiles};
 use skeletal::FingerState;
 use skeletal::SkeletalInputActionData;
@@ -1247,70 +1246,6 @@ impl<C: openxr_data::Compositor> vr::IVRInput005On006 for Input<C> {
 }
 
 impl<C: openxr_data::Compositor> Input<C> {
-    pub fn get_poses(
-        &self,
-        poses: &mut [vr::TrackedDevicePose_t],
-        origin: Option<vr::ETrackingUniverseOrigin>,
-    ) {
-        tracy_span!();
-        let devices = self.devices.read().unwrap();
-        let session_data = self.openxr.session_data.get();
-
-        poses.iter_mut().enumerate().for_each(|(i, pose)| {
-            let device = devices.get_device(i as u32);
-
-            if let Some(device) = device {
-                *pose = device
-                    .get_pose(
-                        &self.openxr,
-                        &session_data,
-                        origin.unwrap_or(session_data.current_origin),
-                    )
-                    .unwrap_or_default();
-            }
-        });
-    }
-
-    pub fn get_controller_pose(
-        &self,
-        hand: Hand,
-        origin: Option<vr::ETrackingUniverseOrigin>,
-    ) -> vr::TrackedDevicePose_t {
-        self.get_device_pose(hand.into(), origin)
-    }
-
-    pub fn get_device_pose(
-        &self,
-        index: vr::TrackedDeviceIndex_t,
-        origin: Option<vr::ETrackingUniverseOrigin>,
-    ) -> vr::TrackedDevicePose_t {
-        tracy_span!();
-
-        let session_data = self.openxr.session_data.get();
-
-        if let Some(device) = self.devices.read().unwrap().get_device(index) {
-            device.get_pose(
-                &self.openxr,
-                &session_data,
-                origin.unwrap_or(session_data.current_origin),
-            ).unwrap_or_default()
-        } else {
-            Default::default()
-        }
-    }
-
-    pub fn is_device_connected(&self, index: vr::TrackedDeviceIndex_t) -> bool {
-        let Some(devices) = self.devices.read().ok() else {
-            return false;
-        };
-
-        let Some(device) = devices.get_device(index) else {
-            return false;
-        };
-
-        device.connected()
-    }
-
     pub fn interaction_profile_changed(&self) {
         let session = self.openxr.session_data.get();
         let devices = self.devices.read().unwrap();
@@ -1421,89 +1356,6 @@ impl<C: openxr_data::Compositor> Input<C> {
                 self.setup_legacy_actions();
             }
         }
-    }
-
-    fn get_profile_data(&self, hand: Hand) -> Option<&profiles::ProfileProperties> {
-        let path = self
-            .devices
-            .read()
-            .ok()?
-            .get_device(hand.into())?
-            .get_profile_path();
-
-        self.profile_map.get(&path).map(|v| &**v)
-    }
-
-    pub fn get_controller_string_tracked_property(
-        &self,
-        hand: Hand,
-        property: vr::ETrackedDeviceProperty,
-    ) -> Option<&'static CStr> {
-        self.get_profile_data(hand).and_then(|data| {
-            match property {
-                // Audica likes to apply controller specific tweaks via this property
-                vr::ETrackedDeviceProperty::ControllerType_String => {
-                    Some(data.openvr_controller_type)
-                }
-                // I Expect You To Die 3 identifies controllers with this property -
-                // why it couldn't just use ControllerType instead is beyond me...
-                // Because some controllers have different model names for each hand......
-                vr::ETrackedDeviceProperty::ModelNumber_String => Some(*data.model.get(hand)),
-                // Resonite won't recognize controllers without this
-                vr::ETrackedDeviceProperty::RenderModelName_String => {
-                    Some(*data.render_model_name.get(hand))
-                }
-                vr::ETrackedDeviceProperty::RegisteredDeviceType_String => {
-                    Some(*data.registered_device_type.get(hand))
-                }
-                vr::ETrackedDeviceProperty::TrackingSystemName_String => {
-                    Some(data.tracking_system_name)
-                }
-                // Required for controllers to be acknowledged in I Expect You To Die 3
-                vr::ETrackedDeviceProperty::SerialNumber_String => {
-                    Some(*data.serial_number.get(hand))
-                }
-                vr::ETrackedDeviceProperty::ManufacturerName_String => Some(data.manufacturer_name),
-                _ => None,
-            }
-        })
-    }
-
-    pub fn get_controller_int_tracked_property(
-        &self,
-        hand: Hand,
-        property: vr::ETrackedDeviceProperty,
-    ) -> Option<i32> {
-        self.get_profile_data(hand).and_then(|data| match property {
-            vr::ETrackedDeviceProperty::Axis0Type_Int32 => match data.main_axis {
-                MainAxisType::Thumbstick => Some(vr::EVRControllerAxisType::Joystick as _),
-                MainAxisType::Trackpad => Some(vr::EVRControllerAxisType::TrackPad as _),
-            },
-            vr::ETrackedDeviceProperty::Axis1Type_Int32 => {
-                Some(vr::EVRControllerAxisType::Trigger as _)
-            }
-            vr::ETrackedDeviceProperty::Axis2Type_Int32 => {
-                // This is actually the grip, and gets recognized as such
-                Some(vr::EVRControllerAxisType::Trigger as _)
-            }
-            // TODO: report knuckles trackpad?
-            vr::ETrackedDeviceProperty::Axis3Type_Int32
-            | vr::ETrackedDeviceProperty::Axis4Type_Int32 => {
-                Some(vr::EVRControllerAxisType::None as _)
-            }
-            _ => None,
-        })
-    }
-
-    pub fn get_controller_uint_tracked_property(
-        &self,
-        hand: Hand,
-        property: vr::ETrackedDeviceProperty,
-    ) -> Option<u64> {
-        self.get_profile_data(hand).and_then(|data| match property {
-            vr::ETrackedDeviceProperty::SupportedButtons_Uint64 => Some(data.legacy_buttons_mask),
-            _ => None,
-        })
     }
 
     pub fn post_session_restart(&self, data: &SessionData) {
