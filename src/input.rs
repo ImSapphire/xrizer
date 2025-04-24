@@ -1405,7 +1405,6 @@ impl<C: openxr_data::Compositor> Input<C> {
                     index: i as vr::TrackedDeviceIndex_t,
                     data: Default::default(),
                 });
-                return true;
             }
         }
 
