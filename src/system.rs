@@ -348,12 +348,22 @@ impl vr::IVRSystem022_Interface for System {
         pose: *mut vr::TrackedDevicePose_t,
     ) -> bool {
         if self.GetControllerState(device_index, state, state_size) {
+            let Some(input) = self.input.get() else {
+                return false;
+            };
+            let Some(hand) = input.device_index_to_hand(device_index) else {
+                return false;
+            };
+
             unsafe {
                 *pose.as_mut().unwrap() = self
                     .input
                     .get()
                     .unwrap()
-                    .get_controller_pose(Hand::try_from(device_index).unwrap(), Some(origin));
+                    .get_controller_pose(
+                        hand,
+                        Some(origin),
+                    );
             }
             true
         } else {
@@ -491,6 +501,13 @@ impl vr::IVRSystem022_Interface for System {
             return 0;
         }
 
+        let Some(input) = self.input.get() else {
+            if let Some(error) = unsafe { error.as_mut() } {
+                *error = vr::ETrackedPropertyError::InvalidDevice;
+            }
+            return 0;
+        };
+
         if let Some(error) = unsafe { error.as_mut() } {
             *error = vr::ETrackedPropertyError::Success;
         }
@@ -511,8 +528,11 @@ impl vr::IVRSystem022_Interface for System {
                 | vr::ETrackedDeviceProperty::ControllerType_String => Some(c"<unknown>"),
                 _ => None,
             },
-            x if Hand::try_from(x).is_ok() => self.input.get().and_then(|i| {
-                i.get_controller_string_tracked_property(Hand::try_from(x).unwrap(), prop)
+            x if input.device_index_to_hand(x).is_some() => self.input.get().and_then(|i| {
+                i.get_controller_string_tracked_property(
+                    input.device_index_to_hand(x).unwrap(),
+                    prop,
+                )
             }),
             _ => None,
         };
@@ -580,13 +600,23 @@ impl vr::IVRSystem022_Interface for System {
             return 0;
         }
 
+        let Some(input) = self.input.get() else {
+            if let Some(err) = unsafe { err.as_mut() } {
+                *err = vr::ETrackedPropertyError::InvalidDevice;
+            }
+            return 0;
+        };
+
         if let Some(err) = unsafe { err.as_mut() } {
             *err = vr::ETrackedPropertyError::Success;
         }
 
         match device_index {
-            x if Hand::try_from(x).is_ok() => self.input.get().and_then(|input| {
-                input.get_controller_uint_tracked_property(Hand::try_from(x).unwrap(), prop)
+            x if input.device_index_to_hand(x).is_some() => self.input.get().and_then(|input| {
+                input.get_controller_uint_tracked_property(
+                    input.device_index_to_hand(x).unwrap(),
+                    prop,
+                )
             }),
             _ => None,
         }
@@ -611,12 +641,23 @@ impl vr::IVRSystem022_Interface for System {
             return 0;
         }
 
+        let Some(input) = self.input.get() else {
+            if let Some(err) = unsafe { err.as_mut() } {
+                *err = vr::ETrackedPropertyError::InvalidDevice;
+            }
+            return 0;
+        };
+
         if let Some(err) = unsafe { err.as_mut() } {
             *err = vr::ETrackedPropertyError::Success;
         }
+
         match device_index {
-            x if Hand::try_from(x).is_ok() => self.input.get().and_then(|input| {
-                input.get_controller_int_tracked_property(Hand::try_from(x).unwrap(), prop)
+            x if input.device_index_to_hand(x).is_some() => self.input.get().and_then(|input| {
+                input.get_controller_int_tracked_property(
+                    input.device_index_to_hand(x).unwrap(),
+                    prop,
+                )
             }),
             _ => None,
         }
@@ -675,26 +716,43 @@ impl vr::IVRSystem022_Interface for System {
     }
 
     fn GetTrackedDeviceClass(&self, index: vr::TrackedDeviceIndex_t) -> vr::ETrackedDeviceClass {
-        TrackedDeviceType::try_from(index).map_or(vr::ETrackedDeviceClass::Invalid, |device| {
-            match device {
-                TrackedDeviceType::Hmd => vr::ETrackedDeviceClass::HMD,
-                TrackedDeviceType::Controller { .. } => vr::ETrackedDeviceClass::Controller,
-            }
-        })
+        self.input
+            .get()
+            .and_then(|input| match input.device_index_to_device_type(index) {
+                Some(TrackedDeviceType::Hmd) => Some(vr::ETrackedDeviceClass::HMD),
+                Some(TrackedDeviceType::Controller { .. }) => {
+                    Some(vr::ETrackedDeviceClass::Controller)
+                }
+                _ => None,
+            })
+            .unwrap_or(vr::ETrackedDeviceClass::Invalid)
     }
 
     fn GetControllerRoleForTrackedDeviceIndex(
         &self,
         index: vr::TrackedDeviceIndex_t,
     ) -> vr::ETrackedControllerRole {
-        Hand::try_from(index).map_or(vr::ETrackedControllerRole::Invalid, |hand| hand.into())
+        let Some(input) = self.input.get() else {
+            return vr::ETrackedControllerRole::Invalid;
+        };
+        input
+            .device_index_to_hand(index)
+            .map_or(vr::ETrackedControllerRole::Invalid, |hand| hand.into())
     }
 
     fn GetTrackedDeviceIndexForControllerRole(
         &self,
         role: vr::ETrackedControllerRole,
     ) -> vr::TrackedDeviceIndex_t {
-        Hand::try_from(role).map_or(vr::k_unTrackedDeviceIndexInvalid, |hand| hand.into())
+        let Some(input) = self.input.get() else {
+            return vr::k_unTrackedDeviceIndexInvalid;
+        };
+
+        Hand::try_from(role).map_or(vr::k_unTrackedDeviceIndexInvalid, |hand| {
+            input
+                .get_controller_device_index(hand)
+                .unwrap_or(vr::k_unTrackedDeviceIndexInvalid)
+        })
     }
     fn ApplyTransform(
         &self,
@@ -708,9 +766,13 @@ impl vr::IVRSystem022_Interface for System {
         &self,
         device_index: vr::TrackedDeviceIndex_t,
     ) -> vr::EDeviceActivityLevel {
+        let Some(input) = self.input.get() else {
+            return vr::EDeviceActivityLevel::Unknown;
+        };
+
         match device_index {
             vr::k_unTrackedDeviceIndex_Hmd => vr::EDeviceActivityLevel::UserInteraction,
-            x if Hand::try_from(x).is_ok() => {
+            x if input.device_index_to_hand(x).is_some() => {
                 if self.IsTrackedDeviceConnected(x) {
                     vr::EDeviceActivityLevel::UserInteraction
                 } else {

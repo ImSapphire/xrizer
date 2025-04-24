@@ -99,7 +99,7 @@ impl<C: openxr_data::Compositor> Input<C> {
             return;
         }
 
-        let Ok(hand) = Hand::try_from(device_index) else {
+        let Some(hand) = self.device_index_to_hand(device_index) else {
             debug!("tried triggering haptic on invalid device index: {device_index}");
             return;
         };
@@ -163,8 +163,8 @@ impl<C: openxr_data::Compositor> Input<C> {
         };
         let actions = &legacy.actions;
 
-        let Ok(hand) = Hand::try_from(device_index) else {
-            debug!("requested controller state for invalid device index: {device_index}");
+        let Some(hand) = self.device_index_to_hand(device_index) else {
+            debug!("tried getting controller state, but device index {device_index} is invalid or not a controller!");
             return false;
         };
 
@@ -498,7 +498,7 @@ mod tests {
                 event.is_none(),
                 "Got unexpected event: {} ({msg})",
                 event.unwrap().ty
-            );  
+            );
         };
 
         let update_action_state = |left_state, right_state| {
@@ -551,7 +551,7 @@ mod tests {
         };
 
         let hands = [LeftHand, RightHand];
-        
+
         while let Some(event) = get_event() {
             assert_eq!(event.ty, vr::EVREventType::TrackedDeviceActivated as u32);
         }
