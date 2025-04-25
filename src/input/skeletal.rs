@@ -191,7 +191,7 @@ impl<C: openxr_data::Compositor> Input<C> {
             Hand::Right => &pose_data.right_space,
         }
         .try_get_or_init_raw(
-            &controller.get_interaction_profile(),
+            &controller.interaction_profile,
             session_data,
             pose_data,
         ) else {
@@ -266,6 +266,15 @@ impl<C: openxr_data::Compositor> Input<C> {
             };
 
             *curl_value = curl;
+
+            let legacy_hand_state = self.get_finger_state(session_data, hand);
+
+            // HACK: use estimated thumb on index to fix gestures
+            if i == 0 && controller.interaction_profile.is_some_and(|p| p.profile_path() == "/interaction_profiles/valve/index_controller") {
+                *curl_value = legacy_hand_state.thumb;
+            } else {
+                *curl_value = curl;
+            }
         }
 
         unsafe {
