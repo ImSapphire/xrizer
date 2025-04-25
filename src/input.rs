@@ -59,7 +59,6 @@ pub struct Input<C: openxr_data::Compositor> {
     estimated_finger_state: [Mutex<FingerState>; 2],
     subaction_paths: SubactionPaths,
     events: Mutex<VecDeque<InputEvent>>,
-    devices: RwLock<TrackedDeviceList>,
     loading_actions: AtomicBool,
 }
 
@@ -99,7 +98,6 @@ impl<T> Drop for WriteOnDrop<T> {
 
 impl<C: openxr_data::Compositor> Input<C> {
     pub fn new(openxr: Arc<OpenXrData<C>>) -> Self {
-        let devices = RwLock::new(TrackedDeviceList::new());
         let mut map = SlotMap::with_key();
         let left_hand_key = map.insert(c"/user/hand/left".into());
         let right_hand_key = map.insert(c"/user/hand/right".into());
@@ -135,7 +133,6 @@ impl<C: openxr_data::Compositor> Input<C> {
             input_source_map: RwLock::new(map),
             action_map: Default::default(),
             set_map: Default::default(),
-            devices,
             loaded_actions_path: OnceLock::new(),
             left_hand_key,
             right_hand_key,
@@ -253,6 +250,7 @@ pub struct InputSessionData {
     actions: OnceLock<LoadedActions>,
     estimated_skeleton_actions: OnceLock<SkeletalInputActionData>,
     pose_data: OnceLock<PoseData>,
+    devices: RwLock<TrackedDeviceList>,
 }
 
 impl InputSessionData {
@@ -752,13 +750,16 @@ impl<C: openxr_data::Compositor> vr::IVRInput010_Interface for Input<C> {
             }};
         }
         let subaction_path = get_subaction_path!(self, restrict_to_device, action_data);
-        let devices = self.devices.read().unwrap();
+
+        let session = self.openxr.session_data.get();
+        let devices = session.input_data.devices.read().unwrap();
         let get_hand = |hand| {
             devices
                 .get_controller(hand)
                 .map(|h| (hand, h.profile_path))
                 .unzip()
         };
+
         let (active_origin, hand) = match loaded.try_get_action(action) {
             Ok(ActionData::Pose) => {
                 let (mut hand, interaction_profile) = match subaction_path {
@@ -1059,7 +1060,7 @@ impl<C: openxr_data::Compositor> vr::IVRInput010_Interface for Input<C> {
             data.session.sync_actions(&sync_sets).unwrap();
         }
 
-        let devices = self.devices.read().unwrap();
+        let devices = data.input_data.devices.read().unwrap();
         let left_profile = devices
             .get_controller(Hand::Left)
             .map(|dev| dev.profile_path);
@@ -1250,7 +1251,7 @@ impl<C: openxr_data::Compositor> vr::IVRInput005On006 for Input<C> {
 
 impl<C: openxr_data::Compositor> Input<C> {
     pub fn interaction_profile_changed(&self, session_data: &SessionData) {
-        let mut devices = self.devices.write().unwrap();
+        let mut devices = session_data.input_data.devices.write().unwrap();
 
         let mut devices_to_create = vec![];
 
@@ -1309,19 +1310,21 @@ impl<C: openxr_data::Compositor> Input<C> {
         }
 
         for (device_type, profile_path, interaction_profile) in devices_to_create {
-            let mut device = TrackedDevice::new(device_type, profile_path, interaction_profile);
+            let mut device = TrackedDevice::new(device_type, profile_path, interaction_profile, None);
             device.connected = true;
 
             devices.push_device(device).unwrap_or_else(|e| {
                 panic!("Failed to create new controller: {:?}", e);
             });
         }
+
+        devices.create_generic_trackers(&self.openxr, session_data).unwrap();
     }
 
     pub fn frame_start_update(&self) {
         tracy_span!();
         let data = self.openxr.session_data.get();
-        let devices = self.devices.read().unwrap();
+        let devices = data.input_data.devices.read().unwrap();
 
         for device in devices.iter() {
             device.clear_pose_cache();
@@ -1411,7 +1414,8 @@ impl<C: openxr_data::Compositor> Input<C> {
             return false;
         }
 
-        let mut devices = self.devices.write().unwrap();
+        let session = self.openxr.session_data.get();
+        let mut devices = session.input_data.devices.write().unwrap();
 
         for (i, device) in devices.iter_mut().enumerate() {
             let current = device.connected;
