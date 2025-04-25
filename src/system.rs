@@ -723,6 +723,9 @@ impl vr::IVRSystem022_Interface for System {
                 Some(TrackedDeviceType::Controller { .. }) => {
                     Some(vr::ETrackedDeviceClass::Controller)
                 }
+                Some(TrackedDeviceType::GenericTracker) => {
+                    Some(vr::ETrackedDeviceClass::GenericTracker)
+                }
                 _ => None,
             })
             .unwrap_or(vr::ETrackedDeviceClass::Invalid)

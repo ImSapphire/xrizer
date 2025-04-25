@@ -64,7 +64,6 @@ pub struct Input<C: openxr_data::Compositor> {
     subaction_paths: SubactionPaths,
     events: Mutex<VecDeque<InputEvent>>,
     loading_actions: AtomicBool,
-    devices: RwLock<TrackedDeviceList>,
 }
 
 struct InputEvent {
@@ -103,7 +102,6 @@ impl<T> Drop for WriteOnDrop<T> {
 
 impl<C: openxr_data::Compositor> Input<C> {
     pub fn new(openxr: Arc<OpenXrData<C>>) -> Self {
-        let devices = TrackedDeviceList::new();
         let mut map = SlotMap::with_key();
         let left_hand_key = map.insert(c"/user/hand/left".into());
         let right_hand_key = map.insert(c"/user/hand/right".into());
@@ -140,7 +138,6 @@ impl<C: openxr_data::Compositor> Input<C> {
             input_source_map: RwLock::new(map),
             action_map: Default::default(),
             set_map: Default::default(),
-            devices: RwLock::new(devices),
             loaded_actions_path: OnceLock::new(),
             left_hand_key,
             right_hand_key,
@@ -258,6 +255,7 @@ pub struct InputSessionData {
     actions: OnceLock<LoadedActions>,
     estimated_skeleton_actions: OnceLock<SkeletalInputActionData>,
     pose_data: OnceLock<PoseData>,
+    devices: RwLock<TrackedDeviceList>,
 }
 
 impl InputSessionData {
@@ -767,7 +765,8 @@ impl<C: openxr_data::Compositor> vr::IVRInput010_Interface for Input<C> {
             }};
         }
         let subaction_path = get_subaction_path!(self, restrict_to_device, action_data);
-        let devices = self.devices.read().unwrap();
+        let session = self.openxr.session_data.get();
+        let devices = session.input_data.devices.read().unwrap();
 
         let left_hand = devices.get_controller(Hand::Left);
         let right_hand = devices.get_controller(Hand::Right);
@@ -1084,7 +1083,8 @@ impl<C: openxr_data::Compositor> vr::IVRInput010_Interface for Input<C> {
             data.session.sync_actions(&sync_sets).unwrap();
         }
 
-        let devices = self.devices.read().unwrap();
+        let session = self.openxr.session_data.get();
+        let devices = session.input_data.devices.read().unwrap();
         let left_hand = devices.get_controller(Hand::Left.into());
         let right_hand = devices.get_controller(Hand::Right.into());
 
@@ -1266,7 +1266,7 @@ impl<C: openxr_data::Compositor> vr::IVRInput005On006 for Input<C> {
 impl<C: openxr_data::Compositor> Input<C> {
     pub fn interaction_profile_changed(&self) {
         let session = self.openxr.session_data.get();
-        let mut devices = self.devices.write().unwrap();
+        let mut devices = session.input_data.devices.write().unwrap();
 
         let mut devices_to_create = vec![];
 
@@ -1309,6 +1309,7 @@ impl<C: openxr_data::Compositor> Input<C> {
                         device_type: TrackedDeviceType::Controller { hand },
                         profile_path: Some(profile_path),
                         interaction_profile: Some(p),
+                        xdev: None,
                     });
                 }
                 hmd.set_interaction_profile(p);
@@ -1331,13 +1332,15 @@ impl<C: openxr_data::Compositor> Input<C> {
                 panic!("Failed to create new controller: {:?}", e);
             });
         }
+
+        devices.create_generic_trackers(&self.openxr).unwrap();
     }
 
     pub fn frame_start_update(&self) {
         tracy_span!();
         let data = self.openxr.session_data.get();
         let input_data = &data.input_data;
-        let devices = self.devices.read().unwrap();
+        let devices = data.input_data.devices.read().unwrap();
 
         devices.iter().for_each(|device| {
             device.clear_pose_cache();
@@ -1426,7 +1429,8 @@ impl<C: openxr_data::Compositor> Input<C> {
             return false;
         }
 
-        let devices = self.devices.read().unwrap();
+        let session = self.openxr.session_data.get();
+        let devices = session.input_data.devices.read().unwrap();
 
         for (i, device) in devices.iter().enumerate() {
             let current = device.connected();

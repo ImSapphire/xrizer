@@ -9,17 +9,26 @@ use std::{
 use openvr as vr;
 use openxr as xr;
 
-use crate::openxr_data::{self, AtomicPath, Hand, OpenXrData, SessionData};
 use crate::tracy_span;
+use crate::{
+    openxr_data::{self, AtomicPath, Hand, OpenXrData, SessionData},
+    runtime_extensions::mndx_xdev_space::Xdev,
+};
 use log::trace;
 
 use super::{profiles::MainAxisType, Input, InteractionProfile};
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub enum TrackedDeviceType {
+    #[default]
     Hmd,
-    Controller { hand: Hand },
+    Controller {
+        hand: Hand,
+    },
+    GenericTracker,
 }
+
+#[derive(Default)]
 pub struct XrTrackedDevice {
     device_type: TrackedDeviceType,
     interaction_profile: Mutex<Option<&'static dyn InteractionProfile>>,
@@ -27,12 +36,14 @@ pub struct XrTrackedDevice {
     connected: AtomicBool,
     previous_connected: AtomicBool,
     pose_cache: Mutex<Option<vr::TrackedDevicePose_t>>,
+    xdev: Option<Xdev>,
 }
 
 pub struct TrackedDeviceCreateInfo {
     pub device_type: TrackedDeviceType,
     pub profile_path: Option<xr::Path>,
     pub interaction_profile: Option<&'static dyn InteractionProfile>,
+    pub xdev: Option<Xdev>,
 }
 
 impl XrTrackedDevice {
@@ -54,6 +65,7 @@ impl XrTrackedDevice {
             },
             previous_connected: false.into(),
             pose_cache: Mutex::new(None),
+            xdev: info.xdev,
         }
     }
 
@@ -72,6 +84,9 @@ impl XrTrackedDevice {
             TrackedDeviceType::Hmd => self.get_hmd_pose(xr_data, session_data, origin),
             TrackedDeviceType::Controller { .. } => {
                 self.get_controller_pose(xr_data, session_data, origin)
+            }
+            TrackedDeviceType::GenericTracker => {
+                self.get_generic_tracker_pose(xr_data, session_data, origin)
             }
         };
 
@@ -178,10 +193,37 @@ impl XrTrackedDevice {
 
         Some(vr::space_relation_to_openvr_pose(location, velocity))
     }
+
+    // Generic Trackers
+    fn get_generic_tracker_pose(
+        &self,
+        xr_data: &OpenXrData<impl crate::openxr_data::Compositor>,
+        session_data: &SessionData,
+        origin: vr::ETrackingUniverseOrigin,
+    ) -> Option<vr::TrackedDevicePose_t> {
+        let (location, velocity) = self
+            .xdev
+            .as_ref()?
+            .space
+            .as_ref()?
+            .relate(
+                session_data.get_space_for_origin(origin),
+                xr_data.display_time.get(),
+            )
+            .ok()?;
+
+        Some(vr::space_relation_to_openvr_pose(location, velocity))
+    }
 }
 
 pub struct TrackedDeviceList {
     devices: Vec<XrTrackedDevice>,
+}
+
+impl Default for TrackedDeviceList {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 pub struct SubactionPaths {
@@ -209,6 +251,7 @@ impl TrackedDeviceList {
                 device_type: TrackedDeviceType::Hmd,
                 profile_path: None,
                 interaction_profile: None,
+                xdev: None,
             })],
         }
     }
@@ -251,6 +294,54 @@ impl TrackedDeviceList {
             .unwrap_or(vr::k_unTrackedDeviceIndexInvalid)
     }
 
+    pub fn create_generic_trackers(
+        &mut self,
+        xr_data: &OpenXrData<impl crate::openxr_data::Compositor>,
+    ) -> xr::Result<()> {
+        let Some(xdev_extension) = xr_data.xdev_extension.as_ref() else {
+            return Ok(());
+        };
+
+        self.devices
+            .retain(|device| device.get_type() != TrackedDeviceType::GenericTracker);
+
+        let max_generic_trackers = vr::k_unMaxTrackedDeviceCount as usize - self.devices.len();
+        log::info!("Creating generic trackers");
+
+        let session = xr_data.session_data.get();
+
+        let xdevs: Vec<Xdev> = xdev_extension
+            .enumerate_xdevs(&session.session, max_generic_trackers)?
+            .into_iter()
+            .filter(|device| {
+                device.space.is_some()
+                    && device.properties.name().to_lowercase().contains("tracker")
+            })
+            .collect();
+
+        log::info!("Found {} generic trackers", xdevs.len());
+
+        xdevs.into_iter().for_each(|xdev| {
+            let tracker = XrTrackedDevice::new(TrackedDeviceCreateInfo {
+                device_type: TrackedDeviceType::GenericTracker,
+                profile_path: None,
+                interaction_profile: None,
+                xdev: Some(xdev),
+            });
+
+            tracker.set_connected(true);
+
+            let res = self.push_device(tracker);
+
+            if res.is_err() {
+                log::error!("Failed to add generic tracker: {:?}", res.unwrap_err());
+                return;
+            }
+        });
+
+        Ok(())
+    }
+
     pub fn iter(&self) -> std::slice::Iter<'_, XrTrackedDevice> {
         self.devices.iter()
     }
@@ -263,7 +354,8 @@ impl<C: openxr_data::Compositor> Input<C> {
         origin: Option<vr::ETrackingUniverseOrigin>,
     ) {
         tracy_span!();
-        let devices = self.devices.read().unwrap();
+        let session = self.openxr.session_data.get();
+        let devices = session.input_data.devices.read().unwrap();
         let session_data = self.openxr.session_data.get();
 
         poses.iter_mut().enumerate().for_each(|(i, pose)| {
@@ -286,7 +378,9 @@ impl<C: openxr_data::Compositor> Input<C> {
         hand: Hand,
         origin: Option<vr::ETrackingUniverseOrigin>,
     ) -> vr::TrackedDevicePose_t {
-        let controller_index = self.devices.read().unwrap().get_controller_index(hand);
+        let session = self.openxr.session_data.get();
+        let devices = session.input_data.devices.read().unwrap();
+        let controller_index = devices.get_controller_index(hand);
 
         self.get_device_pose(controller_index, origin)
     }
@@ -298,13 +392,14 @@ impl<C: openxr_data::Compositor> Input<C> {
     ) -> vr::TrackedDevicePose_t {
         tracy_span!();
 
-        let session_data = self.openxr.session_data.get();
+        let session = self.openxr.session_data.get();
+        let devices = session.input_data.devices.read().unwrap();
 
-        if let Some(device) = self.devices.read().unwrap().get_device(index) {
+        if let Some(device) = devices.get_device(index) {
             device.get_pose(
                 &self.openxr,
-                &session_data,
-                origin.unwrap_or(session_data.current_origin),
+                &session,
+                origin.unwrap_or(session.current_origin),
             ).unwrap_or_default()
         } else {
             Default::default()
@@ -312,7 +407,10 @@ impl<C: openxr_data::Compositor> Input<C> {
     }
 
     pub fn is_device_connected(&self, index: vr::TrackedDeviceIndex_t) -> bool {
-        let Some(devices) = self.devices.read().ok() else {
+        let session = self.openxr.session_data.get();
+        let devices = session.input_data.devices.read();
+
+        let Some(devices) = devices.ok() else {
             return false;
         };
 
@@ -327,21 +425,24 @@ impl<C: openxr_data::Compositor> Input<C> {
         &self,
         index: vr::TrackedDeviceIndex_t,
     ) -> Option<TrackedDeviceType> {
-        let devices = self.devices.read().ok()?;
+        let session = self.openxr.session_data.get();
+        let devices = session.input_data.devices.read().ok()?;
         let device = devices.get_device(index)?;
 
         Some(device.get_type())
     }
 
     pub fn device_index_to_hand(&self, index: vr::TrackedDeviceIndex_t) -> Option<Hand> {
-        let devices = self.devices.read().ok()?;
+        let session = self.openxr.session_data.get();
+        let devices = session.input_data.devices.read().ok()?;
         let device = devices.get_device(index)?;
 
         device.get_controller_hand()
     }
 
     pub fn get_controller_device_index(&self, hand: Hand) -> Option<vr::TrackedDeviceIndex_t> {
-        let devices = self.devices.read().ok()?;
+        let session = self.openxr.session_data.get();
+        let devices = session.input_data.devices.read().ok()?;
         let controller_index = devices.get_controller_index(hand);
 
         if controller_index == vr::k_unTrackedDeviceIndexInvalid {
@@ -352,7 +453,8 @@ impl<C: openxr_data::Compositor> Input<C> {
     }
 
     fn get_profile_data(&self, hand: Hand) -> Option<&super::profiles::ProfileProperties> {
-        let devices = self.devices.read().ok()?;
+        let session = self.openxr.session_data.get();
+        let devices = session.input_data.devices.read().ok()?;
         let controller = devices.get_controller(hand)?;
 
         self.profile_map
