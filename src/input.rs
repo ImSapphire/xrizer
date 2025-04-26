@@ -595,8 +595,8 @@ impl<C: openxr_data::Compositor> vr::IVRInput010_Interface for Input<C> {
             return vr::EVRInputError::WrongType;
         };
 
-        let controller_type = self.get_controller_string_tracked_property(
-            *hand,
+        let controller_type = self.get_device_string_property(
+            self.get_controller_device_index(*hand).unwrap(),
             vr::ETrackedDeviceProperty::ControllerType_String,
         );
 

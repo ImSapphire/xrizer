@@ -546,25 +546,7 @@ impl vr::IVRSystem023_Interface for System {
             &mut []
         };
 
-        let data = match device_index {
-            vr::k_unTrackedDeviceIndex_Hmd => match prop {
-                // The Unity OpenVR sample appears to have a hard requirement on these first three properties returning
-                // something to even get the game to recognize the HMD's location. However, the value
-                // itself doesn't appear to be that important.
-                vr::ETrackedDeviceProperty::SerialNumber_String
-                | vr::ETrackedDeviceProperty::ManufacturerName_String
-                | vr::ETrackedDeviceProperty::ControllerType_String => Some(c"<unknown>"),
-                _ => None,
-            },
-            x if input.device_index_to_hand(x).is_some() => input
-                .get_controller_string_tracked_property(
-                    input.device_index_to_hand(x).unwrap(),
-                    prop,
-                ),
-            _ => None,
-        };
-
-        let Some(data) = data else {
+        let Some(data) = input.get_device_string_property(device_index, prop) else {
             if let Some(error) = unsafe { error.as_mut() } {
                 *error = vr::ETrackedPropertyError::UnknownProperty;
             }
@@ -788,7 +770,7 @@ impl vr::IVRSystem023_Interface for System {
             x if self
                 .input
                 .get()
-                .is_some_and(|input| input.device_index_to_hand(x).is_some()) =>
+                .is_some_and(|input| input.device_index_to_device_type(x).is_some()) =>
             {
                 if self.IsTrackedDeviceConnected(x) {
                     vr::EDeviceActivityLevel::UserInteraction
