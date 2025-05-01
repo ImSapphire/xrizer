@@ -182,9 +182,6 @@ impl TrackedDevice {
             TrackedDeviceType::GenericTracker => {
                 let data = self.interaction_profile.as_ref()?.properties();
 
-                let serial = self.xdev.as_ref()?.properties.serial();
-                let c = unsafe { CStr::from_ptr(serial.as_bytes().as_ptr() as *const i8) };
-
                 match prop {
                     // Audica likes to apply controller specific tweaks via this property
                     vr::ETrackedDeviceProperty::ControllerType_String => {
@@ -205,7 +202,7 @@ impl TrackedDevice {
                         Some(data.tracking_system_name)
                     }
                     // Required for controllers to be acknowledged in I Expect You To Die 3
-                    vr::ETrackedDeviceProperty::SerialNumber_String => Some(c),
+                    vr::ETrackedDeviceProperty::SerialNumber_String => Some(unsafe { CStr::from_ptr(self.xdev.as_ref()?.properties.serial.as_ptr()) }),
                     vr::ETrackedDeviceProperty::ManufacturerName_String => Some(c"<unknown>"),
                     _ => None,
                 }
