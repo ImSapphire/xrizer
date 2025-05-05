@@ -1,6 +1,6 @@
 mod sys;
 
-use std::ptr::addr_of_mut;
+use std::{ffi::CStr, ptr::addr_of_mut};
 
 use sys::{
     XrCreateXDevListInfoMNDX, XrCreateXDevSpaceInfoMNDX, XrGetXDevInfoMNDX, XrXDevIdMNDX,
@@ -19,6 +19,7 @@ pub struct Xdev {
     pub _id: XrXDevIdMNDX,
     pub properties: XrXDevPropertiesMNDX,
     pub space: Option<xr::Space>,
+    pub serial: &'static CStr,
 }
 
 impl PartialEq for Xdev {
@@ -37,6 +38,7 @@ impl Xdev {
             _id,
             properties,
             space,
+            serial: unsafe { CStr::from_ptr(properties.serial.as_ptr()) },
         }
     }
 }
