@@ -75,7 +75,7 @@ impl Default for XrGetXDevInfoMNDX {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct XrXDevPropertiesMNDX {
     ty: xr::sys::StructureType,
     next: usize,
