@@ -1,6 +1,6 @@
 mod sys;
 
-use std::{ffi::CStr, ptr::addr_of_mut};
+use std::{ffi::CStr, ptr::addr_of_mut, sync::Mutex};
 
 use sys::{
     XrCreateXDevListInfoMNDX, XrCreateXDevSpaceInfoMNDX, XrGetXDevInfoMNDX, XrXDevIdMNDX,
@@ -19,7 +19,7 @@ pub struct Xdev {
     pub _id: XrXDevIdMNDX,
     pub properties: XrXDevPropertiesMNDX,
     pub space: Option<xr::Space>,
-    pub serial: &'static CStr,
+    pub serial: Mutex<Option<&'static CStr>>,
 }
 
 impl PartialEq for Xdev {
@@ -34,12 +34,27 @@ impl Xdev {
         properties: XrXDevPropertiesMNDX,
         space: Option<xr::Space>,
     ) -> Self {
+
         Self {
             _id,
-            properties,
             space,
-            serial: unsafe { CStr::from_ptr(properties.serial.as_ptr()) },
+            properties,
+            serial: Mutex::new(None),
         }
+    }
+
+    pub fn get_or_init_serial(&self) -> &'static CStr {
+        let mut serial = self.serial.lock().unwrap();
+
+        if let Some(serial) = serial.as_ref() {
+            return serial;
+        }
+
+        let serial_str = unsafe { CStr::from_ptr(self.properties.serial.as_ptr()) };
+
+        serial.replace(serial_str);
+
+        serial_str
     }
 }
 
@@ -77,7 +92,6 @@ impl XdevSpaceExtension {
 
         xdev_ids.truncate(xdev_id_count as usize);
 
-        let mut current_properties = XrXDevPropertiesMNDX::default();
         let mut current_get_info = XrGetXDevInfoMNDX::default();
         let mut space_create_info =
             XrCreateXDevSpaceInfoMNDX::new(xdev_list, 0, xr::Posef::IDENTITY);
@@ -85,16 +99,17 @@ impl XdevSpaceExtension {
         let xdevs = xdev_ids
             .iter()
             .map(|&id| {
+                let mut properties = XrXDevPropertiesMNDX::default();
                 current_get_info.id = id;
                 space_create_info.id = id;
 
                 self.xr_mndx_xdev_space.get_xdev_properties(
                     xdev_list,
                     &current_get_info,
-                    &mut current_properties,
+                    &mut properties,
                 )?;
 
-                if current_properties.can_create_space() {
+                let xdev = if properties.can_create_space() {
                     let mut raw_space = xr::sys::Space::default();
 
                     self.xr_mndx_xdev_space.create_xdev_space(
@@ -106,10 +121,12 @@ impl XdevSpaceExtension {
                     let space =
                         unsafe { xr::Space::reference_from_raw(session.to_owned(), raw_space) };
 
-                    Ok(Xdev::new(id, current_properties, Some(space)))
+                    Xdev::new(id, properties, Some(space))
                 } else {
-                    Ok(Xdev::new(id, current_properties, None))
-                }
+                    Xdev::new(id, properties, None)
+                };
+
+                Ok(xdev)
             })
             .collect::<xr::Result<Vec<Xdev>>>();
 
