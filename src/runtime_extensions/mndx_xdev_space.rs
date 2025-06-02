@@ -34,7 +34,6 @@ impl Xdev {
         properties: XrXDevPropertiesMNDX,
         space: Option<xr::Space>,
     ) -> Self {
-
         Self {
             _id,
             space,
