@@ -404,7 +404,7 @@ impl TrackedDeviceList {
 
         let forced_serials: Vec<&str> = if let Ok(serials) = std::env::var("XRIZER_TRACKER_SERIALS")
         {
-            forced_serials = serials.split_terminator(":");
+            serials.split_terminator(":");
         } else {
             Vec::new()
         };
