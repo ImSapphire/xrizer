@@ -403,12 +403,14 @@ impl TrackedDeviceList {
         let session = xr_data.session_data.get();
 
         let serials_env = std::env::var("XRIZER_TRACKER_SERIALS").unwrap_or("".to_string());
-        let forced_serials: Vec<&str> = serials_env.split_terminator(":").collect();
+        let forced_serials: Vec<&str> = serials_env.split_terminator(":").filter(|s| !s.is_empty()).collect();
+        log::info!("forced_serials = {forced_serials:?}");
         let xdevs: Vec<Xdev> = xdev_extension
             .enumerate_xdevs(&session.session, max_generic_trackers)?
             .into_iter()
             .filter(|device| {
                 let serial = device.get_or_init_serial().to_str();
+                log::info!("serial: {serial:?}");
                 device.space.is_some()
                     && (device.properties.name().to_lowercase().contains("tracker")
                         || serial.is_ok_and(|s| forced_serials.contains(&s)))
