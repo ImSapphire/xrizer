@@ -120,6 +120,7 @@ impl<C: Compositor> OpenXrData<C> {
         exts.khr_vulkan_enable = supported_exts.khr_vulkan_enable;
         exts.khr_opengl_enable = supported_exts.khr_opengl_enable;
         exts.ext_hand_tracking = supported_exts.ext_hand_tracking;
+        exts.ext_user_presence = supported_exts.ext_user_presence;
         exts.khr_visibility_mask = supported_exts.khr_visibility_mask;
         exts.khr_composition_layer_cylinder = supported_exts.khr_composition_layer_cylinder;
         exts.khr_composition_layer_equirect2 = supported_exts.khr_composition_layer_equirect2;
@@ -200,6 +201,23 @@ impl<C: Compositor> OpenXrData<C> {
                                     bConnectionLost: false,
                                 },
                             },
+                        });
+                    }
+                }
+                xr::Event::UserPresenceChangedEXT(event) => {
+                    info!("User presence changed: {:?}", event.is_user_present());
+                    self.session_data.0.write().unwrap().presence = event.is_user_present();
+                    if let Some(system) = self.system.get() {
+                        let event_type = if event.is_user_present() {
+                            vr::EVREventType::TrackedDeviceUserInteractionStarted
+                        } else {
+                            vr::EVREventType::TrackedDeviceUserInteractionEnded
+                        };
+                        system.push_event(vr::VREvent_t {
+                            eventType: event_type as u32,
+                            trackedDeviceIndex: vr::k_unTrackedDeviceIndex_Hmd,
+                            eventAgeSeconds: 0.0,
+                            data: vr::VREvent_Data_t::default(),
                         });
                     }
                 }
@@ -394,6 +412,7 @@ pub struct SessionData {
     session_graphics: GraphicalSession,
     pub state: xr::SessionState,
     pub view_space: xr::Space,
+    pub presence: bool,
     // The "reference" space is always equivalent to the reference space with an identity offset.
     // The "adjusted" space may have an offset, set by reset_tracking_space.
     // The adjusted spaces should be used for locating things - the reference spaces are only
@@ -536,6 +555,7 @@ impl SessionData {
                 session_graphics,
                 state: xr::SessionState::READY,
                 view_space,
+                presence: true,
                 local_space_reference,
                 local_space_adjusted,
                 stage_space_reference,

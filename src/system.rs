@@ -725,10 +725,25 @@ impl vr::IVRSystem023_Interface for System {
         err: *mut vr::ETrackedPropertyError,
     ) -> bool {
         debug!(target: log_tags::TRACKED_PROP, "requesting bool property: {prop:?} ({device_index})");
-        if let Some(err) = unsafe { err.as_mut() } {
-            *err = vr::ETrackedPropertyError::UnknownProperty;
+        if device_index != vr::k_unTrackedDeviceIndex_Hmd {
+            if let Some(err) = unsafe { err.as_mut() } {
+                *err = vr::ETrackedPropertyError::UnknownProperty;
+            }
+            return false;
         }
-        false
+
+        if let Some(err) = unsafe { err.as_mut() } {
+            *err = vr::ETrackedPropertyError::Success;
+        }
+        match prop {
+            vr::ETrackedDeviceProperty::ContainsProximitySensor_Bool => self.openxr.enabled_extensions.ext_user_presence,
+            _ => {
+                if let Some(err) = unsafe { err.as_mut() } {
+                    *err = vr::ETrackedPropertyError::UnknownProperty;
+                }
+                false
+            }
+        }
     }
 
     fn IsTrackedDeviceConnected(&self, device_index: vr::TrackedDeviceIndex_t) -> bool {
@@ -796,7 +811,11 @@ impl vr::IVRSystem023_Interface for System {
         device_index: vr::TrackedDeviceIndex_t,
     ) -> vr::EDeviceActivityLevel {
         match device_index {
-            vr::k_unTrackedDeviceIndex_Hmd => vr::EDeviceActivityLevel::UserInteraction,
+            vr::k_unTrackedDeviceIndex_Hmd => if self.openxr.session_data.get().presence {
+                vr::EDeviceActivityLevel::UserInteraction
+            } else {
+                vr::EDeviceActivityLevel::Idle
+            }
             x if self
                 .input
                 .get()
