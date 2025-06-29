@@ -527,10 +527,10 @@ impl vr::IVRSystem022_Interface for System {
                 *err = vr::ETrackedPropertyError::InvalidDevice;
             }
         }
-        if let Some(err) = unsafe { err.as_mut() } {
-            *err = vr::ETrackedPropertyError::UnknownProperty;
-        }
 
+        if let Some(err) = unsafe { err.as_mut() } {
+            *err = vr::ETrackedPropertyError::Success;
+        }
         match device_index {
             x if Hand::try_from(x).is_ok() => self.input.get().and_then(|input| {
                 input.get_controller_uint_tracked_property(Hand::try_from(x).unwrap(), prop)
