@@ -86,6 +86,7 @@ impl<C: Compositor> OpenXrData<C> {
         exts.khr_vulkan_enable = supported_exts.khr_vulkan_enable;
         exts.khr_opengl_enable = supported_exts.khr_opengl_enable;
         exts.ext_hand_tracking = supported_exts.ext_hand_tracking;
+        exts.ext_user_presence = supported_exts.ext_user_presence;
         exts.khr_visibility_mask = supported_exts.khr_visibility_mask;
         exts.khr_composition_layer_cylinder = supported_exts.khr_composition_layer_cylinder;
         exts.khr_composition_layer_equirect2 = supported_exts.khr_composition_layer_equirect2;
@@ -142,6 +143,10 @@ impl<C: Compositor> OpenXrData<C> {
                 xr::Event::SessionStateChanged(event) => {
                     self.session_data.0.write().unwrap().state = event.state();
                     info!("OpenXR session state changed: {:?}", event.state());
+                }
+                xr::Event::UserPresenceChangedEXT(event) => {
+                    self.session_data.0.write().unwrap().presence = event.is_user_present();
+                    info!("User presence changed: {:?}", event.is_user_present());
                 }
                 xr::Event::InteractionProfileChanged(_) => {
                     let session = self.session_data.get();
@@ -338,6 +343,7 @@ pub struct SessionData {
     session_graphics: GraphicalSession,
     pub state: xr::SessionState,
     pub view_space: xr::Space,
+    pub presence: bool,
     // The "reference" space is always equivalent to the reference space with an identity offset.
     // The "adjusted" space may have an offset, set by reset_tracking_space.
     // The adjusted spaces should be used for locating things - the reference spaces are only
@@ -480,6 +486,7 @@ impl SessionData {
                 session_graphics,
                 state: xr::SessionState::READY,
                 view_space,
+                presence: true,
                 local_space_reference,
                 local_space_adjusted,
                 stage_space_reference,

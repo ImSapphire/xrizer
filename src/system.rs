@@ -75,6 +75,7 @@ pub struct System {
     input: Injected<Input<crate::compositor::Compositor>>,
     vtables: Vtables,
     last_connected_hands: ConnectedHands,
+    last_proximity: AtomicBool,
     views: Mutex<ViewCache>,
 }
 
@@ -89,6 +90,7 @@ impl System {
             input: injector.inject(),
             vtables: Default::default(),
             last_connected_hands: Default::default(),
+            last_proximity: true.into(),
             views: Mutex::default(),
         }
     }
@@ -358,6 +360,25 @@ impl vr::IVRSystem022_Interface for System {
         size: u32,
         pose: *mut vr::TrackedDevicePose_t,
     ) -> bool {
+        let present = self.openxr.session_data.get().presence;
+        if self.last_proximity
+            .compare_exchange(!present, present, Ordering::Relaxed, Ordering::Relaxed)
+            .is_ok()
+        {
+            let event_type = if present {
+                vr::EVREventType::TrackedDeviceUserInteractionStarted
+            } else {
+                vr::EVREventType::TrackedDeviceUserInteractionEnded
+            };
+            debug!("Proximity changed: {:?}", event_type);
+            unsafe {
+                (&raw mut (*event).eventType).write(event_type as u32);
+                (&raw mut (*event).trackedDeviceIndex).write(vr::k_unTrackedDeviceIndex_Hmd);
+                (&raw mut (*event).eventAgeSeconds).write(0.0);
+            }
+            return true;
+        }
+
         for (current, prev, hand) in [
             (
                 self.openxr.left_hand.connected(),
@@ -623,10 +644,25 @@ impl vr::IVRSystem022_Interface for System {
         err: *mut vr::ETrackedPropertyError,
     ) -> bool {
         debug!(target: log_tags::TRACKED_PROP, "requesting bool property: {prop:?} ({device_index})");
-        if let Some(err) = unsafe { err.as_mut() } {
-            *err = vr::ETrackedPropertyError::UnknownProperty;
+        if device_index != vr::k_unTrackedDeviceIndex_Hmd {
+            if let Some(err) = unsafe { err.as_mut() } {
+                *err = vr::ETrackedPropertyError::UnknownProperty;
+            }
+            return false;
         }
-        false
+
+        if let Some(err) = unsafe { err.as_mut() } {
+            *err = vr::ETrackedPropertyError::Success;
+        }
+        match prop {
+            vr::ETrackedDeviceProperty::ContainsProximitySensor_Bool => self.openxr.enabled_extensions.ext_user_presence,
+            _ => {
+                if let Some(err) = unsafe { err.as_mut() } {
+                    *err = vr::ETrackedPropertyError::UnknownProperty;
+                }
+                false
+            }
+        }
     }
 
     fn IsTrackedDeviceConnected(&self, device_index: vr::TrackedDeviceIndex_t) -> bool {
@@ -700,7 +736,13 @@ impl vr::IVRSystem022_Interface for System {
         device_index: vr::TrackedDeviceIndex_t,
     ) -> vr::EDeviceActivityLevel {
         match device_index {
-            vr::k_unTrackedDeviceIndex_Hmd => vr::EDeviceActivityLevel::UserInteraction,
+            vr::k_unTrackedDeviceIndex_Hmd => {
+                if self.openxr.session_data.get().presence {
+                    vr::EDeviceActivityLevel::UserInteraction
+                } else {
+                    vr::EDeviceActivityLevel::Idle
+                }
+            },
             x if Hand::try_from(x).is_ok() => {
                 if self.IsTrackedDeviceConnected(x) {
                     vr::EDeviceActivityLevel::UserInteraction
