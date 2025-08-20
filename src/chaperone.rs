@@ -40,7 +40,7 @@ impl vr::IVRChaperone004_Interface for Chaperone {
         todo!()
     }
     fn SetSceneColor(&self, _: vr::HmdColor_t) {
-        todo!()
+        crate::warn_unimplemented!("SetSceneColor");
     }
     fn ReloadInfo(&self) {
         todo!()
