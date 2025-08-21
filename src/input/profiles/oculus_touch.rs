@@ -14,8 +14,8 @@ impl InteractionProfile for Touch {
     fn properties(&self) -> &'static ProfileProperties {
         static DEVICE_PROPERTIES: ProfileProperties = ProfileProperties {
             model: Property::PerHand {
-                left: c"Miramar (Left Controller)",
-                right: c"Miramar (Right Controller)",
+                left: c"Oculus Touch (Left Controller)",
+                right: c"Oculus Touch (Right Controller)",
             },
             openvr_controller_type: c"oculus_touch",
             render_model_name: Property::PerHand {
