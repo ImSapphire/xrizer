@@ -669,10 +669,12 @@ mod tests {
 
     #[test]
     fn no_legacy_input_with_manifest() {
-        let f = Fixture::new();
+        let mut f = Fixture::new();
 
         f.input.openxr.restart_session();
+        f.set_interaction_profile(&SimpleController, fakexr::UserPath::RightHand);
         f.input.frame_start_update();
+        f.input.openxr.poll_events();
 
         let mut state = vr::VRControllerState_t::default();
         assert!(f.input.get_legacy_controller_state(
@@ -767,9 +769,12 @@ mod tests {
 
     #[test]
     fn legacy_haptic() {
-        let f = Fixture::new();
+        let mut f = Fixture::new();
         f.input.openxr.restart_session();
+        f.set_interaction_profile(&SimpleController, fakexr::UserPath::LeftHand);
+        f.set_interaction_profile(&SimpleController, fakexr::UserPath::RightHand);
         f.input.frame_start_update();
+        f.input.openxr.poll_events();
         let haptic = f
             .input
             .openxr
