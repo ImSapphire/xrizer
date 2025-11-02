@@ -153,7 +153,11 @@ impl<C: Compositor> OpenXrData<C> {
             .0,
         )));
 
-        let xdev_extension = XdevSpaceExtension::new(&instance).ok();
+        let xdev_extension = if exts.other.contains(&XR_MNDX_XDEV_SPACE_EXTENSION_NAME.to_string()) {
+            XdevSpaceExtension::new(&instance).ok()
+        } else {
+            None
+        };
 
         Ok(Self {
             _entry: entry,
