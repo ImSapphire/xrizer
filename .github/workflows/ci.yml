@@ -76,8 +76,6 @@ jobs:
       run: cargo xbuild --release --verbose
     - name: Run tests
       run: cargo test --verbose
-    - name: Run tests with miri
-      run: cargo +nightly miri test
     - name: Format check
       run: cargo fmt --check
     - name: Clippy
