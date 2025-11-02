@@ -16,9 +16,9 @@ impl CustomStructureType {
     pub const XR_TYPE_CREATE_XDEV_SPACE_INFO_MNDX: CustomStructureType = Self(1000444005);
 }
 
-impl Into<xr::sys::StructureType> for CustomStructureType {
-    fn into(self) -> xr::sys::StructureType {
-        unsafe { std::mem::transmute(self) }
+impl From<CustomStructureType> for xr::sys::StructureType {
+    fn from(val: CustomStructureType) -> Self {
+        unsafe { std::mem::transmute(val) }
     }
 }
 
@@ -187,6 +187,7 @@ pub(super) struct XdevSpaceExtension {
 
 macro_rules! xr_bind {
     ($instance:expr, $name:expr, $function:expr) => {
+        #[allow(clippy::missing_transmute_annotations)]
         let res = xr::sys::get_instance_proc_addr(
             $instance,
             std::ffi::CStr::from_bytes_until_nul($name)

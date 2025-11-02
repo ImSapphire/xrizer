@@ -1085,8 +1085,8 @@ impl<C: openxr_data::Compositor> vr::IVRInput010_Interface for Input<C> {
 
         let session = self.openxr.session_data.get();
         let devices = session.input_data.devices.read().unwrap();
-        let left_hand = devices.get_controller(Hand::Left.into());
-        let right_hand = devices.get_controller(Hand::Right.into());
+        let left_hand = devices.get_controller(Hand::Left);
+        let right_hand = devices.get_controller(Hand::Right);
 
         let left_profile = left_hand.map_or(xr::Path::NULL, |x| x.get_profile_path());
         let right_profile = right_hand.map_or(xr::Path::NULL, |x| x.get_profile_path());

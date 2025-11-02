@@ -150,7 +150,7 @@ impl XrTrackedDevice {
         };
 
         let (location, velocity) = if let Some(raw) =
-            space.try_get_or_init_raw(&self.get_interaction_profile(), session_data, &pose_data)
+            space.try_get_or_init_raw(&self.get_interaction_profile(), session_data, pose_data)
         {
             raw.relate(
                 session_data.get_space_for_origin(origin),
@@ -329,11 +329,8 @@ impl TrackedDeviceList {
 
             tracker.set_connected(true);
 
-            let res = self.push_device(tracker);
-
-            if res.is_err() {
-                log::error!("Failed to add generic tracker: {:?}", res.unwrap_err());
-                return;
+            if let Err(e) = self.push_device(tracker) {
+                log::error!("Failed to add generic tracker: {:?}", e);
             }
         });
 
