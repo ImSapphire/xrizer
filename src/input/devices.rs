@@ -149,11 +149,9 @@ impl XrTrackedDevice {
             Hand::Right => &pose_data.right_space,
         };
 
-        let (location, velocity) = if let Some(raw) = space.try_get_or_init_raw(
-            &self.get_interaction_profile(),
-            session_data,
-            &pose_data,
-        ) {
+        let (location, velocity) = if let Some(raw) =
+            space.try_get_or_init_raw(&self.get_interaction_profile(), session_data, &pose_data)
+        {
             raw.relate(
                 session_data.get_space_for_origin(origin),
                 xr_data.display_time.get(),
@@ -396,11 +394,13 @@ impl<C: openxr_data::Compositor> Input<C> {
         let devices = session.input_data.devices.read().unwrap();
 
         if let Some(device) = devices.get_device(index) {
-            device.get_pose(
-                &self.openxr,
-                &session,
-                origin.unwrap_or(session.current_origin),
-            ).unwrap_or_default()
+            device
+                .get_pose(
+                    &self.openxr,
+                    &session,
+                    origin.unwrap_or(session.current_origin),
+                )
+                .unwrap_or_default()
         } else {
             Default::default()
         }

@@ -360,10 +360,7 @@ impl vr::IVRSystem022_Interface for System {
                     .input
                     .get()
                     .unwrap()
-                    .get_controller_pose(
-                        hand,
-                        Some(origin),
-                    );
+                    .get_controller_pose(hand, Some(origin));
             }
             true
         } else {
