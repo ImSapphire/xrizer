@@ -351,7 +351,6 @@ impl<C: openxr_data::Compositor> Input<C> {
         tracy_span!();
         let session = self.openxr.session_data.get();
         let devices = session.input_data.devices.read().unwrap();
-        let session_data = self.openxr.session_data.get();
 
         poses.iter_mut().enumerate().for_each(|(i, pose)| {
             let device = devices.get_device(i as u32);
@@ -360,8 +359,8 @@ impl<C: openxr_data::Compositor> Input<C> {
                 *pose = device
                     .get_pose(
                         &self.openxr,
-                        &session_data,
-                        origin.unwrap_or(session_data.current_origin),
+                        &session,
+                        origin.unwrap_or(session.current_origin),
                     )
                     .unwrap_or_default();
             }
