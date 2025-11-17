@@ -9,6 +9,7 @@ use glam::{Mat3, Quat, Vec3};
 use log::{debug, error, trace, warn};
 use openvr as vr;
 use openxr as xr;
+use std::collections::VecDeque;
 use std::ffi::CStr;
 use std::sync::{Arc, Mutex};
 
@@ -152,6 +153,7 @@ impl ViewCache {
 #[versions(023, 022, 021, 020, 019, 017, 016, 015, 014, 012, 009)]
 pub struct System {
     openxr: Arc<RealOpenXrData>, // We don't need to test session restarting.
+    events: Mutex<VecDeque<vr::VREvent_t>>,
     input: Injected<Input<crate::compositor::Compositor>>,
     overlay: Injected<OverlayMan>,
     vtables: Vtables,
@@ -166,6 +168,7 @@ impl System {
     pub fn new(openxr: Arc<RealOpenXrData>, injector: &Injector) -> Self {
         Self {
             openxr,
+            events: Mutex::default(),
             input: injector.inject(),
             overlay: injector.inject(),
             vtables: Default::default(),
@@ -191,6 +194,11 @@ impl System {
         let session = self.openxr.session_data.get();
         let mut views = self.views.lock().unwrap();
         views.get_views(&session, self.openxr.display_time.get(), ty)
+    }
+
+    pub fn push_event(&self, event: vr::VREvent_t) {
+        let mut events = self.events.lock().unwrap();
+        events.push_back(event);
     }
 }
 
@@ -301,9 +309,7 @@ impl vr::IVRSystem023_Interface for System {
     fn GetAppContainerFilePaths(&self, _: *mut std::os::raw::c_char, _: u32) -> u32 {
         todo!()
     }
-    fn AcknowledgeQuit_Exiting(&self) {
-        todo!()
-    }
+    fn AcknowledgeQuit_Exiting(&self) {}
     fn PerformFirmwareUpdate(&self, _: vr::TrackedDeviceIndex_t) -> vr::EVRFirmwareError {
         todo!()
     }
@@ -483,6 +489,13 @@ impl vr::IVRSystem023_Interface for System {
         size: u32,
         pose: *mut vr::TrackedDevicePose_t,
     ) -> bool {
+        if let Some(event_) = self.events.lock().unwrap().pop_front() {
+            unsafe {
+                event.write(event_);
+            }
+            return true;
+        }
+
         let Some(input) = self.input.get() else {
             return false;
         };
