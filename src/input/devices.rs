@@ -362,11 +362,8 @@ impl TrackedDeviceList {
 
             tracker.connected = true;
 
-            let res = self.push_device(tracker);
-
-            if res.is_err() {
-                log::error!("Failed to add generic tracker: {:?}", res.unwrap_err());
-                return;
+            if let Err(e) = self.push_device(tracker) {
+                log::error!("Failed to add generic tracker: {e:?}");
             }
         });
 

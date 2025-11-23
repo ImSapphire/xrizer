@@ -16,9 +16,9 @@ impl CustomStructureType {
     pub const XR_TYPE_CREATE_XDEV_SPACE_INFO_MNDX: CustomStructureType = Self(1000444005);
 }
 
-impl Into<xr::sys::StructureType> for CustomStructureType {
-    fn into(self) -> xr::sys::StructureType {
-        unsafe { std::mem::transmute(self) }
+impl From<CustomStructureType> for xr::sys::StructureType {
+    fn from(val: CustomStructureType) -> Self {
+        unsafe { std::mem::transmute(val) }
     }
 }
 
@@ -192,6 +192,7 @@ macro_rules! xr_bind {
             std::ffi::CStr::from_bytes_until_nul($name)
                 .unwrap()
                 .as_ptr(),
+            #[allow(clippy::missing_transmute_annotations)]
             std::mem::transmute(std::ptr::addr_of_mut!($function)),
         );
         if res != xr::sys::Result::SUCCESS {
