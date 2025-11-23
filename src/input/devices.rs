@@ -101,7 +101,7 @@ impl TrackedDevice {
         device_type: TrackedDeviceType,
         profile_path: Option<xr::Path>,
         interaction_profile: Option<&'static dyn InteractionProfile>,
-        xdev: Option<Xdev>
+        xdev: Option<Xdev>,
     ) -> Self {
         Self {
             device_type,
@@ -175,10 +175,12 @@ impl TrackedDevice {
                     vr::ETrackedDeviceProperty::SerialNumber_String => {
                         Some(*data.serial_number.get(hand))
                     }
-                    vr::ETrackedDeviceProperty::ManufacturerName_String => Some(data.manufacturer_name),
+                    vr::ETrackedDeviceProperty::ManufacturerName_String => {
+                        Some(data.manufacturer_name)
+                    }
                     _ => None,
                 }
-            },
+            }
             TrackedDeviceType::GenericTracker => {
                 let data = self.interaction_profile.as_ref()?.properties();
 
@@ -190,7 +192,9 @@ impl TrackedDevice {
                     // I Expect You To Die 3 identifies controllers with this property -
                     // why it couldn't just use ControllerType instead is beyond me...
                     // Because some controllers have different model names for each hand......
-                    vr::ETrackedDeviceProperty::ModelNumber_String => Some(*data.model.get(Hand::Left)),
+                    vr::ETrackedDeviceProperty::ModelNumber_String => {
+                        Some(*data.model.get(Hand::Left))
+                    }
                     // Resonite won't recognize controllers without this
                     vr::ETrackedDeviceProperty::RenderModelName_String => {
                         Some(*data.render_model_name.get(Hand::Left))
@@ -349,7 +353,12 @@ impl TrackedDeviceList {
         log::info!("Found {} generic trackers", xdevs.len());
 
         xdevs.into_iter().for_each(|xdev| {
-            let mut tracker = TrackedDevice::new(TrackedDeviceType::GenericTracker, None, Some(&ViveTracker), Some(xdev));
+            let mut tracker = TrackedDevice::new(
+                TrackedDeviceType::GenericTracker,
+                None,
+                Some(&ViveTracker),
+                Some(xdev),
+            );
 
             tracker.connected = true;
 

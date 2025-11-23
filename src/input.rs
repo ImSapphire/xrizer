@@ -1310,7 +1310,8 @@ impl<C: openxr_data::Compositor> Input<C> {
         }
 
         for (device_type, profile_path, interaction_profile) in devices_to_create {
-            let mut device = TrackedDevice::new(device_type, profile_path, interaction_profile, None);
+            let mut device =
+                TrackedDevice::new(device_type, profile_path, interaction_profile, None);
             device.connected = true;
 
             devices.push_device(device).unwrap_or_else(|e| {
@@ -1318,7 +1319,9 @@ impl<C: openxr_data::Compositor> Input<C> {
             });
         }
 
-        devices.create_generic_trackers(&self.openxr, session_data).unwrap();
+        devices
+            .create_generic_trackers(&self.openxr, session_data)
+            .unwrap();
     }
 
     pub fn frame_start_update(&self) {

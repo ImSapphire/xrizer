@@ -32,9 +32,7 @@ impl InteractionProfile for ViveTracker {
 
     fn legacy_bindings(&self, _stp: &dyn StringToPath) -> LegacyBindings {
         LegacyBindings {
-            extra: legacy::Bindings {
-                grip_pose: vec![],
-            },
+            extra: legacy::Bindings { grip_pose: vec![] },
             trigger: vec![],
             trigger_click: vec![],
             app_menu: vec![],
