@@ -74,6 +74,16 @@ impl ViewCache {
             )
             .expect("Couldn't locate views");
 
+        if std::env::var("XRIZER_NO_PARALLEL_VIEWS").is_ok() {
+            let views = views
+                .try_into()
+                .unwrap_or_else(|v: Vec<xr::View>| panic!("Expected 2 views, got {}", v.len()));
+            return ViewDataViewSpace {
+                data: ViewData { flags, views },
+                original_orientations: [Quat::IDENTITY; 2],
+            };
+        }
+
         let original_orientations = views
             .iter_mut()
             .map(
@@ -115,6 +125,15 @@ impl ViewCache {
                 session.get_space_from_type(ty),
             )
             .expect("Couldn't locate views");
+
+        if std::env::var("XRIZER_NO_PARALLEL_VIEWS").is_ok() {
+            return ViewData {
+                flags,
+                views: views
+                    .try_into()
+                    .unwrap_or_else(|v: Vec<xr::View>| panic!("Expected 2 views, got {}", v.len())),
+            };
+        }
 
         for (
             xr::View {
