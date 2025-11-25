@@ -310,23 +310,30 @@ impl<C: Compositor> OpenXrData<C> {
     }
 
     fn end_session(&self, session_data: &mut SessionData) {
-        session_data.session.request_exit().unwrap();
-        let mut state = session_data.state;
-        while state != xr::SessionState::STOPPING {
-            if let Some(s) = self.poll_events_impl(session_data) {
-                state = s;
-            }
+        if let Some(input) = self.input.get() {
+            input.pre_session_stop(session_data);
         }
+
+        let mut buf = xr::EventDataBuffer::new();
+        let mut wait_for_state = |state| loop {
+            if let Some(xr::Event::SessionStateChanged(event)) =
+                self.instance.poll_event(&mut buf).unwrap()
+            {
+                if event.state() == state {
+                    break;
+                }
+            }
+        };
+
+        session_data.session.request_exit().unwrap();
+        wait_for_state(xr::SessionState::STOPPING);
+
         #[cfg(test)]
         if let Some(comp) = self.compositor.get() {
             comp.on_restart();
         }
         session_data.session.end().unwrap();
-        while state != xr::SessionState::EXITING {
-            if let Some(s) = self.poll_events_impl(session_data) {
-                state = s;
-            }
-        }
+        wait_for_state(xr::SessionState::EXITING);
     }
 }
 

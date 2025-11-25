@@ -59,6 +59,7 @@ pub struct Input<C: openxr_data::Compositor> {
     estimated_finger_state: [Mutex<FingerState>; 2],
     subaction_paths: SubactionPaths,
     events: Mutex<VecDeque<InputEvent>>,
+    devices: RwLock<TrackedDeviceList>,
     loading_actions: AtomicBool,
 }
 
@@ -145,6 +146,7 @@ impl<C: openxr_data::Compositor> Input<C> {
             ],
             subaction_paths,
             events: Mutex::default(),
+            devices: RwLock::new(TrackedDeviceList::new()),
             loading_actions: false.into(),
         }
     }
@@ -250,7 +252,6 @@ pub struct InputSessionData {
     actions: OnceLock<LoadedActions>,
     estimated_skeleton_actions: OnceLock<SkeletalInputActionData>,
     pose_data: OnceLock<PoseData>,
-    devices: RwLock<TrackedDeviceList>,
 }
 
 impl InputSessionData {
@@ -751,8 +752,7 @@ impl<C: openxr_data::Compositor> vr::IVRInput010_Interface for Input<C> {
         }
         let subaction_path = get_subaction_path!(self, restrict_to_device, action_data);
 
-        let session = self.openxr.session_data.get();
-        let devices = session.input_data.devices.read().unwrap();
+        let devices = self.devices.read().unwrap();
         let get_hand = |hand| {
             devices
                 .get_controller(hand)
@@ -1060,7 +1060,7 @@ impl<C: openxr_data::Compositor> vr::IVRInput010_Interface for Input<C> {
             data.session.sync_actions(&sync_sets).unwrap();
         }
 
-        let devices = data.input_data.devices.read().unwrap();
+        let devices = self.devices.read().unwrap();
         let left_profile = devices
             .get_controller(Hand::Left)
             .map(|dev| dev.profile_path);
@@ -1251,7 +1251,7 @@ impl<C: openxr_data::Compositor> vr::IVRInput005On006 for Input<C> {
 
 impl<C: openxr_data::Compositor> Input<C> {
     pub fn interaction_profile_changed(&self, session_data: &SessionData) {
-        let mut devices = session_data.input_data.devices.write().unwrap();
+        let mut devices = self.devices.write().unwrap();
 
         let mut devices_to_create = vec![];
 
@@ -1327,7 +1327,7 @@ impl<C: openxr_data::Compositor> Input<C> {
     pub fn frame_start_update(&self) {
         tracy_span!();
         let data = self.openxr.session_data.get();
-        let devices = data.input_data.devices.read().unwrap();
+        let devices = self.devices.read().unwrap();
 
         for device in devices.iter() {
             device.clear_pose_cache();
@@ -1394,6 +1394,11 @@ impl<C: openxr_data::Compositor> Input<C> {
         }
     }
 
+    pub fn pre_session_stop(&self, _: &SessionData) {
+        // If we don't do this, the devices hold onto the Session
+        self.devices.write().unwrap().clear_generic_trackers();
+    }
+
     pub fn post_session_restart(&self, data: &SessionData) {
         // This function is called while a write lock is called on the session, and as such should
         // not use self.openxr.session_data.get().
@@ -1417,8 +1422,7 @@ impl<C: openxr_data::Compositor> Input<C> {
             return false;
         }
 
-        let session = self.openxr.session_data.get();
-        let mut devices = session.input_data.devices.write().unwrap();
+        let mut devices = self.devices.write().unwrap();
 
         for (i, device) in devices.iter_mut().enumerate() {
             let current = device.connected;
