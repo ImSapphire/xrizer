@@ -411,16 +411,85 @@ impl<C: openxr_data::Compositor> vr::IVRInput010_Interface for Input<C> {
     }
     fn GetActionBindingInfo(
         &self,
-        _: vr::VRActionHandle_t,
-        _: *mut vr::InputBindingInfo_t,
-        _: u32,
-        _: u32,
+        action: vr::VRActionHandle_t,
+        binding_info: *mut vr::InputBindingInfo_t,
+        binding_info_size: u32,
+        binding_info_count: u32,
         returned_binding_info_count: *mut u32,
     ) -> vr::EVRInputError {
-        crate::warn_unimplemented!("GetActionBindingInfo");
+        assert_eq!(
+            binding_info_size as usize,
+            std::mem::size_of::<vr::InputBindingInfo_t>()
+        );
+
+        get_action_from_handle!(self, action, session_data, action);
+        let binding_info =
+            unsafe { std::slice::from_raw_parts_mut(binding_info, binding_info_count as usize) };
+        binding_info.fill(Default::default());
         if !returned_binding_info_count.is_null() {
             unsafe { *returned_binding_info_count = 0 };
         }
+
+        let Ok(bound_sources) = (match action {
+            ActionData::Bool(act) => act.bound_sources(&session_data.session),
+            ActionData::Vector1 { action, .. } => {
+                action.bound_sources(&session_data.session)
+            }
+            ActionData::Vector2 { action, .. } => {
+                action.bound_sources(&session_data.session)
+            }
+            _ => {
+                warn!("GetActionBindingInfo: unknown action type");
+                return vr::EVRInputError::WrongType;
+            }
+        }) else {
+            warn!("GetActionBindingInfo: bound_sources call failed");
+            return vr::EVRInputError::NoData;
+        };
+        let count = bound_sources.len().min(binding_info_count as usize);
+        if !returned_binding_info_count.is_null() {
+            unsafe { *returned_binding_info_count = count as u32; }
+        }
+
+        let info: Vec<_> = bound_sources.iter().map(|source| {
+            let path = self.openxr.instance.path_to_string(*source).unwrap();
+            let parts: Vec<&str> = path.split('/').collect();
+
+            let mode_name = match action {
+                ActionData::Bool(_) => c"button",
+                ActionData::Vector1 { .. } => c"trigger",
+                ActionData::Vector2 { .. } => c"joystick",
+                _ => todo!(),
+            };
+            let mode_name_bytes = unsafe {
+                std::slice::from_raw_parts(mode_name.as_ptr(), mode_name.count_bytes() + 1)
+            };
+            let device_path = CString::new(parts[0..=3].join("/")).unwrap();
+            let device_path_bytes = unsafe {
+                std::slice::from_raw_parts(device_path.as_ptr(), device_path.count_bytes() + 1)
+            };
+            let input_path = CString::new("/".to_owned() + &parts[4..=5].join("/")).unwrap();
+            let input_path_bytes = unsafe {
+                std::slice::from_raw_parts(input_path.as_ptr(), input_path.count_bytes() + 1)
+            };
+
+            let mut out: vr::InputBindingInfo_t = Default::default();
+            out.rchModeName[0..mode_name_bytes.len()].copy_from_slice(mode_name_bytes);
+            out.rchInputSourceType[0..mode_name_bytes.len()].copy_from_slice(mode_name_bytes);
+            out.rchDevicePathName[0..device_path_bytes.len()].copy_from_slice(device_path_bytes);
+            out.rchInputPathName[0..input_path_bytes.len()].copy_from_slice(input_path_bytes);
+
+            info!(
+                "GetActionBindingInfo: rchModeName={} rchInputSourceType={} rchDevicePathName={} rchInputPathName={}",
+                unsafe { CStr::from_ptr(out.rchModeName.as_ptr()).to_string_lossy() },
+                unsafe { CStr::from_ptr(out.rchInputSourceType.as_ptr()).to_string_lossy() },
+                unsafe { CStr::from_ptr(out.rchDevicePathName.as_ptr()).to_string_lossy() },
+                unsafe { CStr::from_ptr(out.rchInputPathName.as_ptr()).to_string_lossy() },
+            );
+            out
+        }).collect();
+
+        binding_info[0..count].copy_from_slice(&info);
         vr::EVRInputError::None
     }
     fn GetOriginTrackedDeviceInfo(
@@ -473,12 +542,55 @@ impl<C: openxr_data::Compositor> vr::IVRInput010_Interface for Input<C> {
     }
     fn GetActionOrigins(
         &self,
-        _: vr::VRActionSetHandle_t,
-        _: vr::VRActionHandle_t,
-        _: *mut vr::VRInputValueHandle_t,
-        _: u32,
+        _set: vr::VRActionSetHandle_t,
+        action: vr::VRActionHandle_t,
+        origins_array: *mut vr::VRInputValueHandle_t,
+        origins_array_count: u32,
     ) -> vr::EVRInputError {
-        crate::warn_unimplemented!("GetActionOrigins");
+        get_action_from_handle!(self, action, session_data, action);
+        let out_origins =
+            unsafe { std::slice::from_raw_parts_mut(origins_array, origins_array_count as usize) };
+        out_origins.fill(vr::k_ulInvalidInputValueHandle);
+
+        let Ok(bound_sources) = (match action {
+            ActionData::Bool(act) => act.bound_sources(&session_data.session),
+            ActionData::Vector1 { action, .. } => {
+                action.bound_sources(&session_data.session)
+            }
+            ActionData::Vector2 { action, .. } => {
+                action.bound_sources(&session_data.session)
+            }
+            _ => {
+                return vr::EVRInputError::WrongType;
+            }
+        }) else {
+            return vr::EVRInputError::None;
+        };
+
+        let origins: Vec<vr::VRInputValueHandle_t> = bound_sources
+            .iter()
+            .map(|source| {
+                let path = self.openxr.instance.path_to_string(*source).unwrap();
+                // only keep the /user/hand/left part
+                let path = path.split('/').collect::<Vec<_>>()[0..=3].join("/");
+
+                let mut handle = vr::k_ulInvalidInputValueHandle;
+
+                let path = CString::new(path.as_str()).unwrap();
+                self.GetInputSourceHandle(path.as_ptr() as _, &mut handle);
+                //assert!(handle == self.left_hand_key.data().as_ffi() || handle == self.right_hand_key.data().as_ffi());
+                //info!("GetActionOrigins: got handle {handle}");
+                handle
+            })
+            .collect();
+
+        let len = origins.len().min(origins_array_count as usize);
+
+        out_origins[0..len].copy_from_slice(&origins);
+        /*assert_eq!(unsafe { std::slice::from_raw_parts(origins_array, len) }, origins);
+        if len >= 1 {
+            assert!(out_origins[0] == self.left_hand_key.data().as_ffi() || out_origins[0] == self.right_hand_key.data().as_ffi());
+        }*/
         vr::EVRInputError::None
     }
     fn TriggerHapticVibrationAction(
