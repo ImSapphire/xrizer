@@ -604,7 +604,7 @@ impl<C: openxr_data::Compositor> vr::IVRInput010_Interface for Input<C> {
         unsafe {
             // Make sure knuckles are always Partial
             // TODO: Remove in favor of using XR_EXT_hand_tracking_data_source
-            if controller_type == Some(c"knuckles") {
+            if controller_type.is_some_and(|t| t.as_c_str() == c"knuckles") {
                 *level = vr::EVRSkeletalTrackingLevel::Partial;
             } else {
                 *level = *self.skeletal_tracking_level.read().unwrap();
@@ -1310,8 +1310,18 @@ impl<C: openxr_data::Compositor> Input<C> {
         }
 
         for (device_type, profile_path, interaction_profile) in devices_to_create {
+            let serial = {
+                let hand = match device_type {
+                    TrackedDeviceType::Controller { hand } => hand,
+                    _ => Hand::Left,
+                };
+                interaction_profile
+                    .map(|p| *p.properties().serial_number.get(hand))
+                    .unwrap_or(c"<unknown>")
+                    .to_owned()
+            };
             let mut device =
-                TrackedDevice::new(device_type, profile_path, interaction_profile, None);
+                TrackedDevice::new(device_type, profile_path, interaction_profile, serial, None);
             device.connected = true;
 
             devices.push_device(device).unwrap_or_else(|e| {

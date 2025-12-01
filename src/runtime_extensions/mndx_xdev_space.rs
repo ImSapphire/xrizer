@@ -1,6 +1,6 @@
 mod sys;
 
-use std::{ffi::CStr, ptr::addr_of_mut, sync::Mutex};
+use std::{ffi::CStr, ptr::addr_of_mut};
 
 use sys::{
     XrCreateXDevListInfoMNDX, XrCreateXDevSpaceInfoMNDX, XrGetXDevInfoMNDX, XrXDevIdMNDX,
@@ -17,9 +17,9 @@ pub struct XdevSpaceExtension {
 
 pub struct Xdev {
     pub _id: XrXDevIdMNDX,
-    pub properties: XrXDevPropertiesMNDX,
     pub space: Option<xr::Space>,
-    pub serial: Mutex<Option<&'static CStr>>,
+    pub name: String,
+    pub serial: String,
 }
 
 impl PartialEq for Xdev {
@@ -34,26 +34,18 @@ impl Xdev {
         properties: XrXDevPropertiesMNDX,
         space: Option<xr::Space>,
     ) -> Self {
+        let name = unsafe { CStr::from_ptr(properties.name.as_ptr()) }
+            .to_string_lossy()
+            .to_string();
+        let serial = unsafe { CStr::from_ptr(properties.serial.as_ptr()) }
+            .to_string_lossy()
+            .to_string();
         Self {
             _id,
             space,
-            properties,
-            serial: Mutex::new(None),
+            name,
+            serial,
         }
-    }
-
-    pub fn get_or_init_serial(&self) -> &'static CStr {
-        let mut serial = self.serial.lock().unwrap();
-
-        if let Some(serial) = serial.as_ref() {
-            return serial;
-        }
-
-        let serial_str = unsafe { CStr::from_ptr(self.properties.serial.as_ptr()) };
-
-        serial.replace(serial_str);
-
-        serial_str
     }
 }
 
@@ -75,12 +67,8 @@ impl XdevSpaceExtension {
         let mut xdev_ids = vec![0; max_generic_trackers];
         let mut xdev_id_count = 0;
 
-        log::info!("Create XDev List");
-
         self.xr_mndx_xdev_space
             .create_xdev_list(session.as_raw(), &create_info, &mut xdev_list)?;
-
-        log::info!("Enumerate XDevs");
 
         self.xr_mndx_xdev_space.enumerate_xdevs(
             xdev_list,

@@ -540,7 +540,7 @@ impl vr::IVRSystem023_Interface for System {
                 // itself doesn't appear to be that important.
                 vr::ETrackedDeviceProperty::SerialNumber_String
                 | vr::ETrackedDeviceProperty::ManufacturerName_String
-                | vr::ETrackedDeviceProperty::ControllerType_String => Some(c"<unknown>"),
+                | vr::ETrackedDeviceProperty::ControllerType_String => Some(c"<unknown>".into()),
                 _ => None,
             }
         } else {
@@ -558,7 +558,6 @@ impl vr::IVRSystem023_Interface for System {
             }
             return 0;
         };
-        
 
         let buf = if !value.is_null() && size > 0 {
             unsafe { std::slice::from_raw_parts_mut(value, size as usize) }
