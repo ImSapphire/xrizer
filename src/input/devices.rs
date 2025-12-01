@@ -6,12 +6,11 @@ use std::{
 use openvr as vr;
 use openxr as xr;
 
+use openxr_mndx_xdev_space::XDev;
+
+use crate::openxr_data::{self, Hand, OpenXrData, SessionData};
 use crate::{input::profiles::vive_tracker::ViveTracker, tracy_span};
-use crate::{
-    openxr_data::{self, Hand, OpenXrData, SessionData},
-    runtime_extensions::mndx_xdev_space::Xdev,
-};
-use log::trace;
+use log::{error, info, trace, warn};
 
 use super::{profiles::MainAxisType, Input, InteractionProfile};
 
@@ -32,7 +31,7 @@ pub struct TrackedDevice {
     pub connected: bool,
     pub previous_connected: bool,
     pose_cache: Mutex<Option<vr::TrackedDevicePose_t>>,
-    xdev: Option<Xdev>,
+    space: Option<xr::Space>,
 }
 
 fn get_hmd_pose(
@@ -85,12 +84,10 @@ fn get_controller_pose(
 fn get_generic_tracker_pose(
     xr_data: &OpenXrData<impl crate::openxr_data::Compositor>,
     session_data: &SessionData,
-    xdev: &Xdev,
+    space: &xr::Space,
     origin: vr::ETrackingUniverseOrigin,
 ) -> Option<vr::TrackedDevicePose_t> {
-    let (location, velocity) = xdev
-        .space
-        .as_ref()?
+    let (location, velocity) = space
         .relate(
             session_data.get_space_for_origin(origin),
             xr_data.display_time.get(),
@@ -106,7 +103,7 @@ impl TrackedDevice {
         profile_path: Option<xr::Path>,
         interaction_profile: Option<&'static dyn InteractionProfile>,
         serial: CString,
-        xdev: Option<Xdev>,
+        space: Option<xr::Space>,
     ) -> Self {
         Self {
             device_type,
@@ -116,7 +113,7 @@ impl TrackedDevice {
             connected: device_type == TrackedDeviceType::Hmd,
             previous_connected: false,
             pose_cache: Mutex::new(None),
-            xdev,
+            space,
         }
     }
 
@@ -137,7 +134,7 @@ impl TrackedDevice {
                 get_controller_pose(xr_data, session_data, self, origin)
             }
             TrackedDeviceType::GenericTracker => {
-                get_generic_tracker_pose(xr_data, session_data, self.xdev.as_ref()?, origin)
+                get_generic_tracker_pose(xr_data, session_data, self.space.as_ref()?, origin)
             }
         };
 
@@ -292,46 +289,50 @@ impl TrackedDeviceList {
             .retain(|device| device.get_type() != TrackedDeviceType::GenericTracker);
     }
 
-    pub fn create_generic_trackers(
-        &mut self,
-        xr_data: &OpenXrData<impl crate::openxr_data::Compositor>,
-        session_data: &SessionData,
-    ) -> xr::Result<()> {
-        let Some(xdev_extension) = xr_data.xdev_extension.as_ref() else {
+    pub fn create_generic_trackers(&mut self, session_data: &SessionData) -> xr::Result<()> {
+        self.clear_generic_trackers();
+
+        let Some(xdev_list) = session_data.input_data.xdev_list.get().unwrap().as_ref() else {
             return Ok(());
         };
 
-        self.clear_generic_trackers();
-
         let max_generic_trackers = vr::k_unMaxTrackedDeviceCount as usize - self.devices.len();
-        log::info!("Creating generic trackers");
+        info!("Creating generic trackers");
 
-        let xdevs: Vec<Xdev> = xdev_extension
-            .enumerate_xdevs(&session_data.session, max_generic_trackers)?
+        let mut xdevs: Vec<XDev> = xdev_list
+            .enumerate_xdevs()?
             .into_iter()
             .filter(|device| {
-                device.space.is_some() && device.name.to_lowercase().contains("tracker")
+                device.can_create_space() && device.name().to_lowercase().contains("tracker")
             })
             .collect();
+        info!("Found {} generic trackers", xdevs.len());
+        if xdevs.len() > max_generic_trackers {
+            warn!(
+                "Discarding {} trackers as we have too many",
+                xdevs.len() - max_generic_trackers
+            );
+            xdevs.truncate(max_generic_trackers);
+        }
 
-        log::info!("Found {} generic trackers", xdevs.len());
-
-        xdevs.into_iter().for_each(|xdev| {
-            let serial = CString::new(xdev.serial.clone()).unwrap();
+        for xdev in xdevs {
+            let serial = CString::new(xdev.serial()).unwrap();
             let mut tracker = TrackedDevice::new(
                 TrackedDeviceType::GenericTracker,
                 None,
                 Some(&ViveTracker),
                 serial,
-                Some(xdev),
+                xdev.create_space(xr::Posef::IDENTITY)
+                    .inspect_err(|e| warn!("Failed to create space for xdev {}: {e}", xdev.name()))
+                    .ok(),
             );
 
             tracker.connected = true;
 
             if let Err(e) = self.push_device(tracker) {
-                log::error!("Failed to add generic tracker: {e:?}");
+                error!("Failed to add generic tracker: {e:?}");
             }
-        });
+        }
 
         Ok(())
     }

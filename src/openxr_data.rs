@@ -1,18 +1,21 @@
 use crate::{
     clientcore::{Injected, Injector},
     graphics_backends::{supported_apis_enum, GraphicsBackend, VulkanData},
-    runtime_extensions::mndx_xdev_space::{XdevSpaceExtension, XR_MNDX_XDEV_SPACE_EXTENSION_NAME},
+    input::InputSessionData,
 };
 use derive_more::Deref;
 use glam::f32::{Quat, Vec3};
 use log::{info, warn};
 use openvr as vr;
 use openxr as xr;
+use openxr_mndx_xdev_space::{InstanceXDevExtensionMNDX, SessionXDevExtensionMNDX};
 use std::mem::ManuallyDrop;
 use std::sync::{
     atomic::{AtomicI64, Ordering},
     RwLock,
 };
+
+const XR_MNDX_XDEV_SPACE_EXTENSION_NAME: &str = "XR_MNDX_xdev_space";
 
 pub trait Compositor: vr::InterfaceImpl {
     fn post_session_restart(
@@ -39,7 +42,6 @@ pub struct OpenXrData<C: Compositor> {
     pub session_data: SessionReadGuard,
     pub display_time: AtomicXrTime,
     pub enabled_extensions: xr::ExtensionSet,
-    pub xdev_extension: Option<XdevSpaceExtension>,
 
     /// should only be externally accessed for testing
     pub(crate) input: Injected<crate::input::Input<C>>,
@@ -154,18 +156,13 @@ impl<C: Compositor> OpenXrData<C> {
         let session_data = SessionReadGuard(RwLock::new(ManuallyDrop::new(
             SessionData::new(
                 &instance,
+                &exts,
                 system_id,
                 vr::ETrackingUniverseOrigin::Standing,
                 None,
             )?
             .0,
         )));
-
-        let xdev_extension = exts
-            .other
-            .contains(&XR_MNDX_XDEV_SPACE_EXTENSION_NAME.to_string())
-            .then(|| XdevSpaceExtension::new(&instance).ok())
-            .flatten();
 
         Ok(Self {
             _entry: entry,
@@ -174,7 +171,6 @@ impl<C: Compositor> OpenXrData<C> {
             session_data,
             display_time: AtomicXrTime(1.into()),
             enabled_extensions: exts,
-            xdev_extension,
             input: injector.inject(),
             compositor: injector.inject(),
         })
@@ -226,9 +222,14 @@ impl<C: Compositor> OpenXrData<C> {
         // We need to destroy the old session before creating the new one.
         let _ = unsafe { ManuallyDrop::take(&mut *session_guard) };
 
-        let (session, waiter, stream) =
-            SessionData::new(&self.instance, self.system_id, origin, Some(&info))
-                .expect("Failed to initalize new session");
+        let (session, waiter, stream) = SessionData::new(
+            &self.instance,
+            &self.enabled_extensions,
+            self.system_id,
+            origin,
+            Some(&info),
+        )
+        .expect("Failed to initalize new session");
 
         comp.post_session_restart(&session, waiter, stream);
 
@@ -432,6 +433,7 @@ pub enum SessionCreationError {
 impl SessionData {
     fn new(
         instance: &xr::Instance,
+        exts: &xr::ExtensionSet,
         system_id: xr::SystemId,
         current_origin: vr::ETrackingUniverseOrigin,
         create_info: Option<&SessionCreateInfo>,
@@ -530,6 +532,27 @@ impl SessionData {
             .map_err(SessionCreationError::BeginSessionFailed)?;
         info!("Began OpenXR session.");
 
+        let xdev_list = if exts
+            .other
+            .contains(&XR_MNDX_XDEV_SPACE_EXTENSION_NAME.to_string())
+            && instance
+                .supports_mndx_xdev_spaces(system_id)
+                .unwrap_or(false)
+        {
+            session
+                .get_xdev_list()
+                .inspect_err(|e| warn!("Failed to create xdev list: {e}"))
+                .ok()
+        } else {
+            None
+        };
+
+        let input_data: InputSessionData = Default::default();
+        input_data
+            .xdev_list
+            .set(xdev_list)
+            .unwrap_or_else(|_| unreachable!());
+
         Ok((
             SessionData {
                 temp_vulkan,
@@ -541,7 +564,7 @@ impl SessionData {
                 local_space_adjusted,
                 stage_space_reference,
                 stage_space_adjusted,
-                input_data: Default::default(),
+                input_data,
                 comp_data: Default::default(),
                 overlay_data: Default::default(),
                 current_origin,

@@ -40,6 +40,7 @@ env_logger = "0.11.5"
 glam = { workspace = true }
 log = { workspace = true }
 openxr = { workspace = true }
+openxr_mndx_xdev_space = "0.1.0"
 openvr = { path = "openvr" }
 paste = "1.0.15"
 seq-macro = "0.3.5"
@@ -68,3 +69,6 @@ libloading = "0.8.5"
 test-cdylib = "1.1.0"
 fakexr = { path = "fakexr" }
 macros = { path = "macros", features = ["test"]}
+
+[patch.crates-io]
+openxr = { git = "https://github.com/ralith/openxrs", rev = "d0afdd3", version = "0.19.0" }

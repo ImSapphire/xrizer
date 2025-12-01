@@ -25,6 +25,7 @@ use legacy::LegacyActionData;
 use log::{debug, info, trace, warn};
 use openvr as vr;
 use openxr as xr;
+use openxr_mndx_xdev_space::XDevList;
 use slotmap::{new_key_type, Key, KeyData, SecondaryMap, SlotMap};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::ffi::{c_char, CStr, CString};
@@ -249,6 +250,7 @@ impl<C: openxr_data::Compositor> Input<C> {
 
 #[derive(Default)]
 pub struct InputSessionData {
+    pub xdev_list: OnceLock<Option<XDevList>>,
     actions: OnceLock<LoadedActions>,
     estimated_skeleton_actions: OnceLock<SkeletalInputActionData>,
     pose_data: OnceLock<PoseData>,
@@ -1329,9 +1331,7 @@ impl<C: openxr_data::Compositor> Input<C> {
             });
         }
 
-        devices
-            .create_generic_trackers(&self.openxr, session_data)
-            .unwrap();
+        devices.create_generic_trackers(session_data).unwrap();
     }
 
     pub fn frame_start_update(&self) {
