@@ -352,17 +352,14 @@ impl vr::IVRSystem023_Interface for System {
     ) -> bool {
         let input = self.input.force(|_| Input::new(self.openxr.clone()));
 
-        let Some(hand) = input.device_index_to_hand(device_index) else {
+        if input.device_index_to_hand(device_index).is_none() {
             return false;
         };
 
         if self.GetControllerState(device_index, state, state_size) {
             unsafe {
-                *pose.as_mut().unwrap() = self
-                    .input
-                    .get()
-                    .unwrap()
-                    .get_controller_pose(hand, Some(origin))
+                *pose.as_mut().unwrap() = input
+                    .get_device_pose(device_index, Some(origin))
                     .unwrap_or_default();
             }
             true
@@ -787,13 +784,9 @@ impl vr::IVRSystem023_Interface for System {
             x if self
                 .input
                 .get()
-                .is_some_and(|input| input.device_index_to_device_type(x).is_some()) =>
+                .is_some_and(|input| input.is_device_connected(x)) =>
             {
-                if self.IsTrackedDeviceConnected(x) {
-                    vr::EDeviceActivityLevel::UserInteraction
-                } else {
-                    vr::EDeviceActivityLevel::Unknown
-                }
+                vr::EDeviceActivityLevel::UserInteraction
             }
             _ => vr::EDeviceActivityLevel::Unknown,
         }
