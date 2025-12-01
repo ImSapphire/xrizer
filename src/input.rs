@@ -56,7 +56,6 @@ pub struct Input<C: openxr_data::Compositor> {
     loaded_actions_path: OnceLock<PathBuf>,
     legacy_state: legacy::LegacyState,
     skeletal_tracking_level: RwLock<vr::EVRSkeletalTrackingLevel>,
-    profile_map: HashMap<xr::Path, &'static profiles::ProfileProperties>,
     estimated_finger_state: [Mutex<FingerState>; 2],
     subaction_paths: SubactionPaths,
     events: Mutex<VecDeque<InputEvent>>,
@@ -104,18 +103,6 @@ impl<C: openxr_data::Compositor> Input<C> {
         let left_hand_key = map.insert(c"/user/hand/left".into());
         let right_hand_key = map.insert(c"/user/hand/right".into());
         let subaction_paths = SubactionPaths::new(&openxr.instance);
-        let profile_map = Profiles::get()
-            .profiles_iter()
-            .map(|profile| {
-                (
-                    openxr
-                        .instance
-                        .string_to_path(profile.profile_path())
-                        .unwrap(),
-                    profile.properties(),
-                )
-            })
-            .collect();
         let pose_data = PoseData::new(
             &openxr.instance,
             subaction_paths.left,
@@ -140,7 +127,6 @@ impl<C: openxr_data::Compositor> Input<C> {
             right_hand_key,
             legacy_state: Default::default(),
             skeletal_tracking_level: RwLock::new(vr::EVRSkeletalTrackingLevel::Estimated),
-            profile_map,
             estimated_finger_state: [
                 Mutex::new(FingerState::new()),
                 Mutex::new(FingerState::new()),

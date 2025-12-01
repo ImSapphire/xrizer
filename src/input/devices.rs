@@ -442,7 +442,7 @@ impl<C: openxr_data::Compositor> Input<C> {
         let devices = self.devices.read().unwrap();
         let controller = devices.get_controller(hand)?;
 
-        self.profile_map.get(&controller.profile_path).map(|v| &**v)
+        controller.interaction_profile.map(|p| p.properties())
     }
 
     pub fn get_controller_int_tracked_property(
