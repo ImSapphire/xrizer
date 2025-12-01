@@ -529,28 +529,41 @@ impl vr::IVRSystem023_Interface for System {
             return 0;
         }
 
-        let Some(input) = self.input.get() else {
-            if let Some(error) = unsafe { error.as_mut() } {
-                *error = vr::ETrackedPropertyError::InvalidDevice;
-            }
-            return 0;
-        };
-
         if let Some(error) = unsafe { error.as_mut() } {
             *error = vr::ETrackedPropertyError::Success;
         }
+
+        let data = if device_index == vr::k_unTrackedDeviceIndex_Hmd {
+            match prop {
+                // The Unity OpenVR sample appears to have a hard requirement on these first three properties returning
+                // something to even get the game to recognize the HMD's location. However, the value
+                // itself doesn't appear to be that important.
+                vr::ETrackedDeviceProperty::SerialNumber_String
+                | vr::ETrackedDeviceProperty::ManufacturerName_String
+                | vr::ETrackedDeviceProperty::ControllerType_String => Some(c"<unknown>"),
+                _ => None,
+            }
+        } else {
+            let Some(input) = self.input.get() else {
+                if let Some(error) = unsafe { error.as_mut() } {
+                    *error = vr::ETrackedPropertyError::InvalidDevice;
+                }
+                return 0;
+            };
+            input.get_device_string_property(device_index, prop)
+        };
+        let Some(data) = data else {
+            if let Some(error) = unsafe { error.as_mut() } {
+                *error = vr::ETrackedPropertyError::UnknownProperty;
+            }
+            return 0;
+        };
+        
 
         let buf = if !value.is_null() && size > 0 {
             unsafe { std::slice::from_raw_parts_mut(value, size as usize) }
         } else {
             &mut []
-        };
-
-        let Some(data) = input.get_device_string_property(device_index, prop) else {
-            if let Some(error) = unsafe { error.as_mut() } {
-                *error = vr::ETrackedPropertyError::UnknownProperty;
-            }
-            return 0;
         };
 
         let data =
