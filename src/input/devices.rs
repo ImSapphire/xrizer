@@ -297,13 +297,18 @@ impl TrackedDeviceList {
         };
 
         let max_generic_trackers = vr::k_unMaxTrackedDeviceCount as usize - self.devices.len();
+        let tracker_serials = std::env::var("XRIZER_TRACKER_SERIALS").map_or(vec![], |trackers| {
+            trackers.split(";").map(|v| v.to_string()).collect()
+        });
         info!("Creating generic trackers");
 
         let mut xdevs: Vec<XDev> = xdev_list
             .enumerate_xdevs()?
             .into_iter()
             .filter(|device| {
-                device.can_create_space() && device.name().to_lowercase().contains("tracker")
+                device.can_create_space()
+                    && (device.name().to_lowercase().contains("tracker")
+                        || tracker_serials.contains(&device.serial().to_string()))
             })
             .collect();
         info!("Found {} generic trackers", xdevs.len());
