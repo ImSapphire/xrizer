@@ -1283,7 +1283,11 @@ impl<C: openxr_data::Compositor> Input<C> {
                         })
                         .ok();
                     devices_to_create.push((
-                        TrackedDeviceType::Controller { hand, hand_tracker },
+                        TrackedDeviceType::Controller {
+                            hand,
+                            hand_tracker,
+                            skeleton_cache: Mutex::new(None),
+                        },
                         Some(profile_path),
                         Some(p),
                     ));
