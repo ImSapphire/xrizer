@@ -75,9 +75,76 @@ fn get_controller_pose(
     controller: &TrackedDevice,
     origin: vr::ETrackingUniverseOrigin,
 ) -> Option<vr::TrackedDevicePose_t> {
+    let hand = controller.get_controller_hand().unwrap();
+    let pose_from_hand_tracking = || {
+        if let Some(joints) = controller.get_hand_skeleton(xr_data, session_data.tracking_space()) {
+            let wrist = joints[xr::HandJointEXT::WRIST];
+            let offset_wrist = {
+                let position = wrist.pose.position;
+                let orientation = wrist.pose.orientation;
+                let wrist = glam::Mat4::from_rotation_translation(
+                    glam::Quat::from_xyzw(
+                        orientation.x,
+                        orientation.y,
+                        orientation.z,
+                        orientation.w,
+                    ),
+                    glam::Vec3::from_array([position.x, position.y, position.z]),
+                );
+
+                let mut offset = glam::Mat4::from_translation(match hand {
+                    Hand::Left => glam::Vec3 {
+                        x: 0.09,
+                        y: -0.03,
+                        z: -0.09,
+                    },
+                    Hand::Right => glam::Vec3 {
+                        x: -0.09,
+                        y: -0.03,
+                        z: -0.09,
+                    },
+                });
+                let rot_offset = match hand {
+                    Hand::Left => [0.0, -45.0, -90.0],
+                    Hand::Right => [0.0, 45.0, 90.0],
+                };
+                offset *= glam::Mat4::from_euler(
+                    glam::EulerRot::XYZ,
+                    rot_offset[0],
+                    rot_offset[1],
+                    rot_offset[2],
+                );
+                wrist * offset
+            };
+
+            let (_, rot, pos) = offset_wrist.to_scale_rotation_translation();
+            (
+                xr::SpaceLocation {
+                    location_flags: wrist.location_flags,
+                    pose: xr::Posef {
+                        position: xr::Vector3f {
+                            x: pos.x,
+                            y: pos.y,
+                            z: pos.z,
+                        },
+                        orientation: xr::Quaternionf {
+                            x: rot.x,
+                            y: rot.y,
+                            z: rot.z,
+                            w: rot.w,
+                        },
+                    },
+                },
+                xr::SpaceVelocity::default(),
+            )
+        } else {
+            trace!("No hand tracking available, returning empty pose");
+            (xr::SpaceLocation::default(), xr::SpaceVelocity::default())
+        }
+    };
     let pose_data = session_data.input_data.pose_data.get()?;
 
-    let spaces = match controller.get_controller_hand().unwrap() {
+    let spaces = match hand {
         Hand::Left => &pose_data.left_space,
         Hand::Right => &pose_data.right_space,
     };
@@ -85,14 +152,25 @@ fn get_controller_pose(
     let (location, velocity) = if let Some(raw) =
         spaces.try_get_or_init_raw(&controller.interaction_profile, session_data, pose_data)
     {
-        raw.relate(
-            session_data.get_space_for_origin(origin),
-            xr_data.display_time.get(),
-        )
-        .ok()?
+        let pose = raw
+            .relate(
+                session_data.get_space_for_origin(origin),
+                xr_data.display_time.get(),
+            )
+            .ok();
+
+        if pose.is_some_and(|(loc, _)| {
+            loc.location_flags
+                .contains(xr::SpaceLocationFlags::ORIENTATION_VALID)
+        }) {
+            pose.unwrap()
+        } else {
+            pose_from_hand_tracking()
+        }
     } else {
-        trace!("Failed to get raw space, returning empty pose");
-        (xr::SpaceLocation::default(), xr::SpaceVelocity::default())
+        trace!("Failed to get raw space, trying hand tracking");
+
+        pose_from_hand_tracking()
     };
 
     Some(vr::space_relation_to_openvr_pose(location, velocity))
@@ -190,6 +268,22 @@ impl TrackedDevice {
         std::mem::take(&mut *self.pose_cache.lock().unwrap());
         if let TrackedDeviceType::Controller { skeleton_cache, .. } = self.get_type() {
             std::mem::take(&mut *skeleton_cache.lock().unwrap());
+        }
+    }
+
+    pub fn is_connected(
+        &self,
+        xr_data: &OpenXrData<impl crate::openxr_data::Compositor>,
+        session_data: &SessionData,
+    ) -> bool {
+        match self.get_type() {
+            TrackedDeviceType::Controller { .. } => {
+                self.connected
+                    || self
+                        .get_hand_skeleton(xr_data, session_data.tracking_space())
+                        .is_some()
+            }
+            _ => self.connected,
         }
     }
 
@@ -492,7 +586,9 @@ impl<C: openxr_data::Compositor> Input<C> {
         let session_data = self.openxr.session_data.get();
         let devices = session_data.input_data.devices.read().unwrap();
 
-        devices.get_device(index).is_some_and(|d| d.connected)
+        devices
+            .get_device(index)
+            .is_some_and(|d| d.is_connected(&self.openxr, &session_data))
     }
 
     pub fn device_index_to_tracked_device_class(
