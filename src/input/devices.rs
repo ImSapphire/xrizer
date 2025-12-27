@@ -412,10 +412,45 @@ pub struct TrackedDeviceList {
     devices: Vec<TrackedDevice>,
 }
 
-impl Default for TrackedDeviceList {
-    fn default() -> Self {
+impl TrackedDeviceList {
+    pub fn new(session: &xr::Session<xr::AnyGraphics>) -> Self {
+        let create_hand_tracker = |hand: Hand| {
+            session
+                .create_hand_tracker(hand.into())
+                .inspect_err(|e| {
+                    if !matches!(
+                        *e,
+                        xr::sys::Result::ERROR_EXTENSION_NOT_PRESENT
+                            | xr::sys::Result::ERROR_FEATURE_UNSUPPORTED
+                    ) {
+                        log::warn!("Failed to create hand tracker for hand {hand:?}: {e}");
+                    }
+                })
+                .ok()
+        };
+
         Self {
-            devices: vec![TrackedDevice::new(TrackedDeviceType::Hmd, None, None)],
+            devices: vec![
+                TrackedDevice::new(TrackedDeviceType::Hmd, None, None),
+                TrackedDevice::new(
+                    TrackedDeviceType::Controller {
+                        hand: Hand::Left,
+                        hand_tracker: create_hand_tracker(Hand::Left),
+                        skeleton_cache: Mutex::new(None),
+                    },
+                    None,
+                    None,
+                ),
+                TrackedDevice::new(
+                    TrackedDeviceType::Controller {
+                        hand: Hand::Right,
+                        hand_tracker: create_hand_tracker(Hand::Right),
+                        skeleton_cache: Mutex::new(None),
+                    },
+                    None,
+                    None,
+                ),
+            ],
         }
     }
 }

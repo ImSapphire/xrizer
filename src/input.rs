@@ -235,7 +235,6 @@ impl<C: openxr_data::Compositor> Input<C> {
     }
 }
 
-#[derive(Default)]
 pub struct InputSessionData {
     actions: OnceLock<LoadedActions>,
     estimated_skeleton_actions: OnceLock<SkeletalInputActionData>,
@@ -244,6 +243,15 @@ pub struct InputSessionData {
 }
 
 impl InputSessionData {
+    pub(crate) fn new(session: &xr::Session<xr::AnyGraphics>) -> Self {
+        Self {
+            actions: OnceLock::new(),
+            estimated_skeleton_actions: OnceLock::new(),
+            pose_data: OnceLock::new(),
+            devices: RwLock::new(TrackedDeviceList::new(session)),
+        }
+    }
+
     #[inline]
     fn get_loaded_actions(&self) -> Option<&ManifestLoadedActions> {
         match self.actions.get()? {
