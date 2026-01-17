@@ -125,8 +125,14 @@ fn init_logging() {
                 }
             }
 
-            let state_dir = std::env::var("XDG_STATE_HOME")
-                .or_else(|_| std::env::var("HOME").map(|h| h + "/.local/state"));
+            let state_dir = if cfg!(unix) {
+                std::env::var("XDG_STATE_HOME")
+                    .or_else(|_| std::env::var("HOME").map(|h| h + "/.local/state"))
+            } else if cfg!(windows) {
+                std::env::var("LOCALAPPDATA")
+            } else {
+                todo!()
+            };
 
             if let Ok(state) = state_dir {
                 let path = Path::new(&state).join("xrizer");
