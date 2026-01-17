@@ -28,6 +28,11 @@ enum Message {
     Unknown,
 }
 
+#[cfg(unix)]
+const LIB_EXTENSION: &str = ".so";
+#[cfg(windows)]
+const LIB_EXTENSION: &str = ".dll";
+
 fn main() {
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let mut cmd = Command::new(cargo)
@@ -65,7 +70,7 @@ fn main() {
                 lib_path = Some(
                     a.filenames
                         .into_iter()
-                        .find(|p| p.ends_with(".so"))
+                        .find(|p| p.ends_with(LIB_EXTENSION))
                         .unwrap(),
                 )
             }
@@ -108,7 +113,13 @@ fn main() {
             .extension()
             .expect("build shared library should have an extension"),
     );
-    match std::os::unix::fs::symlink(&lib_path, vrclient_path) {
+
+    #[cfg(unix)]
+    let res = std::os::unix::fs::symlink(&lib_path, vrclient_path);
+    #[cfg(windows)]
+    let res = std::fs::rename(&lib_path, vrclient_path);
+
+    match res {
         Ok(_) => (),
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => (),
         err => {
