@@ -1393,7 +1393,7 @@ impl vr::IVROverlay021On024 for OverlayMan {
                 vr::EKeyboardFlags::Minimal.0
             } else {
                 0
-            },
+            } as u32,
             description,
             char_max,
             existing_text,
@@ -1418,7 +1418,7 @@ impl vr::IVROverlay021On024 for OverlayMan {
                 vr::EKeyboardFlags::Minimal.0
             } else {
                 0
-            },
+            } as u32,
             description,
             char_max,
             existing_text,

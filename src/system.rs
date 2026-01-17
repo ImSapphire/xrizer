@@ -970,7 +970,7 @@ impl vr::IVRSystem009On012 for System {
 
         if ret && !event.is_null() {
             let event = unsafe { event.as_mut() }.unwrap();
-            event.eventType = if let Ok(t) = vr::EVREventType::try_from(e.eventType) {
+            event.eventType = if let Ok(t) = vr::EVREventType::try_from(e.eventType as i32) {
                 t
             } else {
                 error!("Unhandled event type for 0.9.12: {}", e.eventType);
