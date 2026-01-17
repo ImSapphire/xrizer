@@ -13,6 +13,16 @@ use std::sync::{
     RwLock,
 };
 
+#[cfg(windows)]
+use {
+    std::ffi::OsString,
+    std::os::windows::ffi::OsStringExt,
+    std::path::Path,
+    windows::core::PCWSTR,
+    windows::Win32::Foundation::MAX_PATH,
+    windows::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW},
+};
+
 #[cfg(feature = "monado")]
 use openxr_mndx_xdev_space::XR_MNDX_XDEV_SPACE_EXTENSION_NAME;
 
@@ -70,6 +80,7 @@ impl From<SessionCreationError> for InitError {
     }
 }
 
+#[cfg(unix)]
 fn get_app_name() -> Option<String> {
     let exe = std::fs::read_link("/proc/self/exe")
         .inspect_err(|e| warn!("Couldn't get app name from /proc/self/exe: {e}"))
@@ -95,6 +106,21 @@ fn get_app_name() -> Option<String> {
     }
 
     Some(basename.to_string_lossy().into_owned())
+}
+
+#[cfg(windows)]
+fn get_app_name() -> Option<String> {
+    let exe = unsafe {
+        let handle = GetModuleHandleW(PCWSTR::null())
+            .inspect_err(|e| log::warn!("Failed to get executable handle: {e}"))
+            .ok()?;
+
+        let mut buf = [0u16; MAX_PATH as usize];
+        GetModuleFileNameW(Some(handle), &mut buf);
+        OsString::from_wide(&buf)
+    };
+
+    Some(Path::new(&exe).file_stem()?.to_string_lossy().into_owned())
 }
 
 fn make_version() -> u32 {

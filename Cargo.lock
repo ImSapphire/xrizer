@@ -2722,6 +2722,7 @@ dependencies = [
  "tracy-client",
  "vergen-gitcl",
  "webbrowser 1.0.6",
+ "windows",
 ]
 
 [[package]]
