@@ -60,10 +60,15 @@ egui = "0.31.1"
 egui-miniquad = "0.16"
 miniquad = "0.4.8"
 webbrowser = "1.0.5"
-glutin_glx_sys = "0.6.0"
-libc = "0.2.169"
 derive_more = { workspace = true }
 gl = "0.14.0"
+
+[target.'cfg(unix)'.dependencies]
+glutin_glx_sys = "0.6.0"
+libc = "0.2.169"
+
+[target.'cfg(windows)'.dependencies]
+glutin_wgl_sys = "0.6.1"
 
 [build-dependencies]
 anyhow = "1.0.99"
