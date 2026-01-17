@@ -307,8 +307,41 @@ impl<C: Compositor> OpenXrData<C> {
     }
 
     fn end_session(&self, session_data: &mut SessionData) {
-        session_data.session.request_exit().unwrap();
         let mut state = session_data.state;
+
+        while state == xr::SessionState::READY {
+            // we need to synchronise to the runtime's frame loop before
+            // our session state ever changes
+            let s = session_data.session.as_raw();
+            unsafe {
+                let (mut res, out) = {
+                    let mut x = xr::sys::FrameState::out(std::ptr::null_mut());
+                    (
+                        xr::sys::wait_frame(s, std::ptr::null(), x.as_mut_ptr()),
+                        x.assume_init(),
+                    )
+                };
+                log::warn!("frame waited {res:?}");
+                res = xr::sys::begin_frame(s, std::ptr::null());
+                log::warn!("frame begun {res:?}");
+
+                let end_info = xr::sys::FrameEndInfo {
+                    ty: xr::sys::FrameEndInfo::TYPE,
+                    next: std::ptr::null(),
+                    display_time: out.predicted_display_time,
+                    environment_blend_mode: xr::sys::EnvironmentBlendMode::OPAQUE,
+                    layer_count: 0,
+                    layers: std::ptr::null(),
+                };
+                res = xr::sys::end_frame(s, &end_info);
+                log::warn!("frame end {res:?}");
+            }
+            if let Some(s) = self.poll_events_impl(session_data) {
+                state = s;
+            }
+        }
+
+        session_data.session.request_exit().unwrap();
         while state != xr::SessionState::STOPPING {
             if let Some(s) = self.poll_events_impl(session_data) {
                 state = s;
