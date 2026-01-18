@@ -835,8 +835,52 @@ impl vr::IVRSystem023_Interface for System {
                 .expect("Failed to get vulkan physical device") as _;
         }
     }
+
+    #[cfg(unix)]
     fn GetDXGIOutputInfo(&self, _: *mut i32) {
-        todo!()
+        unimplemented!()
+    }
+    #[cfg(windows)]
+    fn GetDXGIOutputInfo(&self, adapter_index: *mut i32) {
+        use windows::Win32::Graphics::Dxgi::{
+            CreateDXGIFactory, IDXGIFactory, DXGI_ERROR_NOT_FOUND,
+        };
+
+        let requirements = self
+            .openxr
+            .instance
+            .graphics_requirements::<xr::D3D11>(self.openxr.system_id)
+            .unwrap();
+
+        let factory: IDXGIFactory = unsafe { CreateDXGIFactory() }.unwrap();
+
+        let mut index = 0;
+        loop {
+            let adapter = match unsafe { factory.EnumAdapters(index) } {
+                Ok(adapter) => adapter,
+                Err(e) => {
+                    if e.code() == DXGI_ERROR_NOT_FOUND {
+                        error!("Couldn't find matching DXGI adapter");
+                        unsafe {
+                            *adapter_index = -1;
+                        }
+                        return;
+                    } else {
+                        panic!("Error when enumerating DirectX adapters: {e}");
+                    }
+                }
+            };
+
+            let desc = unsafe { adapter.GetDesc() }.unwrap();
+            if desc.AdapterLuid.LowPart == requirements.adapter_luid.LowPart
+                && desc.AdapterLuid.HighPart == requirements.adapter_luid.HighPart
+            {
+                log::info!("Using adapter at index {index}");
+                unsafe { *adapter_index = index as i32 };
+                return;
+            }
+            index += 1;
+        }
     }
     fn GetD3D9AdapterIndex(&self) -> i32 {
         todo!()

@@ -69,8 +69,10 @@ libc = "0.2.169"
 
 [target.'cfg(windows)'.dependencies]
 glutin_wgl_sys = "0.6.1"
-windows = { version = ">=0.59, <=0.62", features = [
-    "Win32_System_LibraryLoader"
+windows = { version = "0.62.2", features = [
+    "Win32_System_LibraryLoader",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi_Common"
 ]}
 
 [build-dependencies]
