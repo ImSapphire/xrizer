@@ -144,6 +144,7 @@ impl<C: Compositor> OpenXrData<C> {
             .map_err(InitError::EnumeratingExtensionsFailed)?;
         let mut exts = xr::ExtensionSet::default();
         exts.khr_vulkan_enable = supported_exts.khr_vulkan_enable;
+        exts.khr_d3d11_enable = supported_exts.khr_d3d11_enable;
         exts.khr_opengl_enable = supported_exts.khr_opengl_enable;
         exts.ext_hand_tracking = supported_exts.ext_hand_tracking;
         exts.khr_visibility_mask = supported_exts.khr_visibility_mask;
@@ -416,6 +417,8 @@ impl std::fmt::Display for GraphicalSession {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             GraphicalSession::Vulkan(_) => f.write_str("GraphicalSession::Vulkan"),
+            #[cfg(windows)]
+            GraphicalSession::D3D11(_) => f.write_str("GraphicalSession::D3D11"),
             GraphicalSession::OpenGL(_) => f.write_str("GraphicalSession::OpenGL"),
             #[cfg(test)]
             GraphicalSession::Fake(_) => f.write_str("GraphicalSession::Fake"),

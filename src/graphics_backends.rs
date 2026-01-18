@@ -1,3 +1,5 @@
+#[cfg(windows)]
+mod d3d11;
 mod gl;
 mod vulkan;
 
@@ -6,6 +8,11 @@ pub use gl::GlData;
 use openvr as vr;
 use openxr as xr;
 pub use vulkan::VulkanData;
+
+#[cfg(windows)]
+pub use d3d11::D3D11Data;
+#[cfg(windows)]
+use {windows::core::Interface, windows::Win32::Graphics::Direct3D11::ID3D11Texture2D};
 
 pub trait GraphicsBackend: Into<SupportedBackend> {
     type Api: xr::Graphics + 'static;
@@ -55,6 +62,8 @@ pub trait GraphicsBackend: Into<SupportedBackend> {
 #[allow(clippy::large_enum_variant)]
 pub enum SupportedBackend {
     Vulkan(VulkanData),
+    #[cfg(windows)]
+    D3D11(D3D11Data),
     OpenGL(GlData),
     #[cfg(test)]
     Fake(crate::compositor::FakeGraphicsData),
@@ -111,6 +120,8 @@ impl SupportedBackend {
     pub fn is_texture_type_supported(texture_type: vr::ETextureType) -> bool {
         match texture_type {
             vr::ETextureType::Vulkan | vr::ETextureType::OpenGL => true,
+            #[cfg(windows)]
+            vr::ETextureType::DirectX => true,
             #[cfg(test)]
             vr::ETextureType::Reserved => true,
             _ => false,
@@ -122,6 +133,11 @@ impl SupportedBackend {
             vr::ETextureType::Vulkan => {
                 let vk_texture = unsafe { &*(texture.handle as *const vr::VRVulkanTextureData_t) };
                 Some(Self::Vulkan(VulkanData::new(vk_texture)))
+            }
+            #[cfg(windows)]
+            vr::ETextureType::DirectX => {
+                let dx_texture = unsafe { ID3D11Texture2D::from_raw(texture.handle) };
+                D3D11Data::new(dx_texture).map(Self::D3D11)
             }
             vr::ETextureType::OpenGL => GlData::new().map(Self::OpenGL),
             #[cfg(test)]
