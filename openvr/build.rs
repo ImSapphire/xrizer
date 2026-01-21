@@ -2,9 +2,9 @@ use bindgen::callbacks::ParseCallbacks;
 
 use prettyplease::unparse;
 use proc_macro2::TokenStream;
-use quote::{format_ident, ToTokens};
+use quote::{ToTokens, format_ident};
 use regex::Regex;
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{HashMap, hash_map::Entry};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -93,6 +93,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         version!(2, 12, 14),
         version!(2, 5, 1),
         version!(2, 0, 10),
+        version!(1, 23, 7),
         version!(1, 16, 8),
         version!(1, 14, 15),
         version!(1, 8, 19),
@@ -245,9 +246,12 @@ fn verify_fields_are_identical<'a, T>(
                 existing_field.ident.as_ref().unwrap().to_string(),
                 new_field.ident.as_ref().unwrap().to_string(),
             ];
-            assert!(idents.contains(&"repeatCount".into()) && idents.contains(&"unused".into()),
+            assert!(
+                idents.contains(&"repeatCount".into()) && idents.contains(&"unused".into()),
                 "Non-allowed differently named fields in {ident} (left = {:?} from {existing_mod}, right = {:?} from {new_mod})",
-                existing_field.ident, new_field.ident);
+                existing_field.ident,
+                new_field.ident
+            );
         }
 
         fn extract_type<'a>(
@@ -557,19 +561,19 @@ fn versionify_interface(
     let mut replace = None;
     // check if we already pulled this version
     let version_num: u32 = version_str.parse().unwrap();
-    if let Some(versions) = versioned.get_mut(interface) {
-        if let Some(old_item) = versions.iter_mut().find(|item| item.version == version_num) {
-            let old_version: HeaderVersion = old_item.parent_mod.to_string().parse().unwrap();
-            let new_version: HeaderVersion = item_mod.to_string().parse().unwrap();
+    if let Some(versions) = versioned.get_mut(interface)
+        && let Some(old_item) = versions.iter_mut().find(|item| item.version == version_num)
+    {
+        let old_version: HeaderVersion = old_item.parent_mod.to_string().parse().unwrap();
+        let new_version: HeaderVersion = item_mod.to_string().parse().unwrap();
 
-            // only replace it if we have the same version from a newer header -
-            // the headers like to add new things without updating versions
-            if old_version >= new_version {
-                return;
-            }
-
-            replace = Some(old_item);
+        // only replace it if we have the same version from a newer header -
+        // the headers like to add new things without updating versions
+        if old_version >= new_version {
+            return;
         }
+
+        replace = Some(old_item);
     }
 
     // change names
@@ -584,7 +588,7 @@ fn versionify_interface(
         panic!("vtable field was not pointer");
     };
     let vtable_ident = &vtable.ident;
-    ty.elem = Box::new(parse_quote!(#vtable_ident));
+    *ty.elem = parse_quote!(#vtable_ident);
 
     for field in vtable.fields.iter_mut() {
         let syn::Type::BareFn(f) = &mut field.ty else {
@@ -600,7 +604,7 @@ fn versionify_interface(
             unreachable!();
         };
         let versioned_ident = &versioned_struct.ident;
-        this.elem = Box::new(parse_quote!(#versioned_ident));
+        *this.elem = parse_quote!(#versioned_ident);
 
         for arg in args {
             let syn::Type::Path(path) = extract_array_or_ptr_type(&mut arg.ty) else {
@@ -927,10 +931,10 @@ fn process_and_versionify_types(tokens: TokenStream) -> String {
         .flat_map(|(name, (mut item, parent))| {
             // TODO: use the add_attributes method on ParseCallbacks instead
             // after updating bindgen?
-            if let syn::Item::Enum(e) = &mut item {
-                if e.ident == "EVREventType" {
-                    e.attrs.push(parse_quote!(#[try_from(repr)]));
-                }
+            if let syn::Item::Enum(e) = &mut item
+                && e.ident == "EVREventType"
+            {
+                e.attrs.push(parse_quote!(#[try_from(repr)]));
             }
 
             let mut items = vec![item];
