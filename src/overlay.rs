@@ -19,7 +19,9 @@ pub const SKYBOX_Z_ORDER: i64 = -1;
 
 #[derive(macros::InterfaceImpl)]
 #[interface = "IVROverlay"]
-#[versions(028, 027, 026, 025, 024, 021, 020, 019, 018, 017, 016, 014, 013, 007)]
+#[versions(
+    028, 027, 026, 025, 024, 021, 020, 019, 018, 017, 016, 014, 013, 012, 011, 010, 007
+)]
 pub struct OverlayMan {
     vtables: Vtables,
     openxr: Arc<OpenXrData<Compositor>>,
@@ -359,8 +361,10 @@ impl<G: xr::Graphics> OverlayLayer<'_, G> {
                 next: std::ptr::null(),
                 color_bias: Default::default(),
                 color_scale: xr::Color4f {
+                    r: 1.0,
+                    g: 1.0,
+                    b: 1.0,
                     a: alpha,
-                    ..Default::default()
                 },
             });
 
@@ -1551,18 +1555,7 @@ impl vr::IVROverlay013On014 for OverlayMan {
     }
 }
 
-impl vr::IVROverlay011On013 for OverlayMan {
-    fn PollNextOverlayEvent(
-        &self,
-        _: vr::VROverlayHandle_t,
-        _: *mut vr::vr_0_9_20::VREvent_t,
-        _: u32,
-    ) -> bool {
-        todo!()
-    }
-}
-
-impl vr::IVROverlay007On011 for OverlayMan {
+impl vr::IVROverlay007On010 for OverlayMan {
     fn PollNextOverlayEvent(
         &self,
         _: vr::VROverlayHandle_t,
