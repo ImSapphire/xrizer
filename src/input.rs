@@ -666,10 +666,39 @@ impl<C: openxr_data::Compositor> vr::IVRInput010_Interface for Input<C> {
     }
     fn SetDominantHand(&self, _: vr::ETrackedControllerRole) -> vr::EVRInputError {
         crate::warn_unimplemented!("SetDominantHand");
+
+        let data = self.openxr.session_data.get();
+        let Some(loaded) = data.input_data.get_loaded_actions() else {
+            // FIXME: what does SteamVR return?
+            return vr::EVRInputError::InvalidHandle;
+        };
+        if !loaded.supports_dominant_hand_setting {
+            // FIXME: what does SteamVR return?
+            return vr::EVRInputError::PermissionDenied;
+        }
+
         vr::EVRInputError::None
     }
-    fn GetDominantHand(&self, _: *mut vr::ETrackedControllerRole) -> vr::EVRInputError {
+    fn GetDominantHand(&self, dominant_hand: *mut vr::ETrackedControllerRole) -> vr::EVRInputError {
         crate::warn_unimplemented!("GetDominantHand");
+
+        let data = self.openxr.session_data.get();
+        let Some(loaded) = data.input_data.get_loaded_actions() else {
+            // FIXME: what does SteamVR return?
+            return vr::EVRInputError::InvalidHandle;
+        };
+        if !loaded.supports_dominant_hand_setting {
+            // FIXME: what does SteamVR return?
+            return vr::EVRInputError::PermissionDenied;
+        }
+
+        if dominant_hand.is_null() {
+            return vr::EVRInputError::InvalidParam;
+        }
+
+        unsafe {
+            *dominant_hand = vr::ETrackedControllerRole::RightHand;
+        }
         vr::EVRInputError::None
     }
     fn GetSkeletalActionData(
@@ -1565,6 +1594,7 @@ struct ManifestLoadedActions {
     _info_action: xr::Action<bool>,
     haptic_set: xr::ActionSet,
     haptic_action: xr::Action<xr::Haptic>,
+    supports_dominant_hand_setting: bool,
 }
 
 impl ManifestLoadedActions {

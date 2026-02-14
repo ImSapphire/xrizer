@@ -250,6 +250,7 @@ impl<C: openxr_data::Compositor> Input<C> {
             info_set,
             haptic_action,
             haptic_set,
+            supports_dominant_hand_setting: manifest.supports_dominant_hand_setting,
         };
 
         session_data
@@ -268,6 +269,8 @@ impl<C: openxr_data::Compositor> Input<C> {
 
 #[derive(Deserialize)]
 struct ActionManifest {
+    #[serde(default)]
+    supports_dominant_hand_setting: bool,
     default_bindings: Vec<DefaultBindings>,
     #[serde(default)] // optional apparently
     action_sets: Vec<ActionSetJson>,
