@@ -127,6 +127,7 @@ impl<C: Compositor> OpenXrData<C> {
             supported_exts.khr_composition_layer_color_scale_bias;
         exts.htc_vive_focus3_controller_interaction =
             supported_exts.htc_vive_focus3_controller_interaction;
+        exts.meta_recommended_layer_resolution = supported_exts.meta_recommended_layer_resolution;
 
         // Extension that enables simple full body tracking support via generic tracked devices.
         // Available only in the Monado OpenXR runtime.
@@ -351,7 +352,7 @@ impl SessionReadGuard {
 }
 
 pub struct Session<G: xr::Graphics> {
-    session: xr::Session<G>,
+    pub session: xr::Session<G>,
     swapchain_formats: Vec<G::Format>,
 }
 supported_apis_enum!(pub enum GraphicalSession: Session);
@@ -384,7 +385,7 @@ impl SessionCreateInfo {
 
 pub struct SessionData {
     pub session: xr::Session<xr::AnyGraphics>,
-    session_graphics: GraphicalSession,
+    pub session_graphics: GraphicalSession,
     pub state: xr::SessionState,
     pub view_space: xr::Space,
     // The "reference" space is always equivalent to the reference space with an identity offset.

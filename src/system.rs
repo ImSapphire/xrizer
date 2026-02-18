@@ -1,7 +1,7 @@
 use crate::{
     clientcore::{Injected, Injector},
     input::Input,
-    openxr_data::{Hand, RealOpenXrData, SessionData},
+    openxr_data::{self, GraphicalSession, Hand, RealOpenXrData, SessionData},
     overlay::OverlayMan,
     tracy_span,
 };
@@ -196,7 +196,7 @@ impl System {
 
 impl vr::IVRSystem023_Interface for System {
     fn GetRecommendedRenderTargetSize(&self, width: *mut u32, height: *mut u32) {
-        let views = self
+        let view_configs = self
             .openxr
             .instance
             .enumerate_view_configuration_views(
@@ -205,12 +205,82 @@ impl vr::IVRSystem023_Interface for System {
             )
             .unwrap();
 
-        if !width.is_null() {
-            unsafe { *width = views[0].recommended_image_rect_width };
+        if self
+            .openxr
+            .enabled_extensions
+            .meta_recommended_layer_resolution
+        {
+            let session_data = self.openxr.session_data.get();
+
+            #[macros::any_graphics(GraphicalSession)]
+            fn get_recommended_resolution<G: xr::Graphics>(
+                s: &openxr_data::Session<G>,
+                session_data: &SessionData,
+                view_config: xr::ViewConfigurationView,
+                views: [xr::View; 2],
+                display_time: xr::Time,
+            ) -> xr::Result<Option<xr::Extent2Di>> {
+                let layer_views: Vec<_> = views
+                    .iter()
+                    .enumerate()
+                    .map(|(eye_index, view)| {
+                        xr::CompositionLayerProjectionView::new()
+                            .fov(view.fov)
+                            .pose(view.pose)
+                            .sub_image(
+                                xr::SwapchainSubImage::new()
+                                    .image_array_index(eye_index as u32)
+                                    .image_rect(xr::Rect2Di {
+                                        extent: xr::Extent2Di {
+                                            width: view_config
+                                                .recommended_image_rect_width
+                                                .cast_signed(),
+                                            height: view_config
+                                                .recommended_image_rect_height
+                                                .cast_signed(),
+                                        },
+                                        offset: xr::Offset2Di::default(),
+                                    }),
+                            )
+                    })
+                    .collect();
+                let layer = xr::CompositionLayerProjection::new()
+                    .space(session_data.tracking_space())
+                    .views(&layer_views);
+                s.session
+                    .get_recommended_layer_resolution(display_time, &layer)
+            }
+
+            let ViewData { views, .. } =
+                self.get_views(session_data.current_origin_as_reference_space());
+
+            let r = session_data
+                .session_graphics
+                .with_any_graphics::<get_recommended_resolution>((
+                    &session_data,
+                    view_configs[0],
+                    views,
+                    self.openxr.display_time.get(),
+                ))
+                .inspect_err(|e| debug!("Failed to get recommended layer resolution: {e}"));
+
+            if let Ok(Some(extent)) = r {
+                if let Some(width) = unsafe { width.as_mut() } {
+                    *width = extent.width.cast_unsigned()
+                };
+                if let Some(height) = unsafe { height.as_mut() } {
+                    *height = extent.height.cast_unsigned()
+                };
+                return;
+            }
         }
 
-        if !height.is_null() {
-            unsafe { *height = views[0].recommended_image_rect_height };
+        if let Some(width) = unsafe { width.as_mut() } {
+            *width = view_configs[0].recommended_image_rect_width;
+        }
+
+        if let Some(height) = unsafe { height.as_mut() } {
+            *height = view_configs[0].recommended_image_rect_height;
         }
     }
     fn GetProjectionMatrix(&self, eye: vr::EVREye, near_z: f32, far_z: f32) -> vr::HmdMatrix44_t {
