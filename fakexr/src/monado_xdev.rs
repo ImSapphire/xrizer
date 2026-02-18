@@ -1,6 +1,6 @@
 use crate::XrType;
 
-use super::{Handle, Space, SpaceType, destroy_handle, get_handle, impl_handle};
+use super::{Space, SpaceType, XrHandle, destroy_handle, get_handle, impl_handle};
 use openxr_mndx_xdev_space::bindings::XDevIdMNDX;
 use openxr_sys as xr;
 use std::ffi::{CString, c_char};

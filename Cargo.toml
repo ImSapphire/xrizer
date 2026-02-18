@@ -27,13 +27,14 @@ edition = "2024"
 all = "deny"
 
 [patch.crates-io]
-openxr = { git = "https://github.com/ralith/openxrs", rev = "d0afdd3" }
-openxr-sys = { git = "https://github.com/ralith/openxrs", rev = "d0afdd3" }
+openxr = { git = "https://github.com/ralith/openxrs", rev = "0023844" }
+openxr-sys = { git = "https://github.com/ralith/openxrs", rev = "0023844" }
+openxr_mndx_xdev_space = { git = "https://github.com/schmarni-dev/openxr_mndx_xdev_space", rev = "c9f2352" }
 
 [workspace.dependencies]
 ash = "0.38.0"
-openxr = { version = "0.19.0", features = ["static"] }
-openxr-sys = { version = "0.11.0" }
+openxr = { version = "0.21.1", features = ["static"] }
+openxr-sys = { version = "0.13.1" }
 slotmap = "1.0.7"
 glam = "0.30.4"
 log = "0.4.22"

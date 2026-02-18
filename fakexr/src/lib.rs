@@ -5,7 +5,7 @@ pub use monado_xdev::add_trackers;
 
 use crossbeam_utils::atomic::AtomicCell;
 use glam::{Affine3A, Quat, Vec3};
-use openxr_sys as xr;
+use openxr_sys::{self as xr, Handle};
 use paste::paste;
 use slotmap::{DefaultKey, Key, KeyData, SlotMap};
 use std::collections::{HashMap, HashSet};
@@ -387,14 +387,14 @@ extern "system" fn enumerate_instance_extension_properties(
     xr::Result::SUCCESS
 }
 
-trait Handle: 'static {
+trait XrHandle: 'static {
     type XrType: XrType;
     fn instances() -> MutexGuard<'static, SlotMap<DefaultKey, Arc<Self>>>;
     fn to_xr(self: Arc<Self>) -> Self::XrType;
 }
 
 trait XrType {
-    type Handle: Handle;
+    type Handle: XrHandle;
     const TO_RAW: fn(Self) -> u64;
     fn to_handle(self) -> Option<Arc<Self::Handle>>;
 }
@@ -425,7 +425,7 @@ macro_rules! impl_handle {
                     .map(|i| Arc::clone(i))
             }
         }
-        impl Handle for $ty {
+        impl XrHandle for $ty {
             type XrType = $xr_type;
             fn instances()
             -> std::sync::MutexGuard<'static, slotmap::SlotMap<slotmap::DefaultKey, Arc<Self>>>
