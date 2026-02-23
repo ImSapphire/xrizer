@@ -11,6 +11,7 @@ use openxr::{self as xr};
 use paste::paste;
 use std::cell::RefCell;
 use std::f32::consts::{FRAC_PI_2, PI};
+use std::mem::MaybeUninit;
 use std::time::Instant;
 
 impl<C: openxr_data::Compositor> Input<C> {
@@ -43,7 +44,54 @@ impl<C: openxr_data::Compositor> Input<C> {
             return;
         };
 
-        let Some(joints) = raw.locate_hand_joints(hand_tracker, display_time).unwrap() else {
+        fn get_joints_with_data_source(
+            base: &xr::Space,
+            tracker: &xr::HandTracker,
+            time: xr::Time,
+        ) -> xr::Result<Option<(xr::HandJointLocations, xr::HandTrackingDataSourceEXT)>> {
+            let ext = base.instance().exts().ext_hand_tracking.unwrap();
+            unsafe {
+                let locate_info = xr::sys::HandJointsLocateInfoEXT {
+                    ty: xr::sys::HandJointsLocateInfoEXT::TYPE,
+                    next: std::ptr::null(),
+                    base_space: base.as_raw(),
+                    time,
+                };
+                let mut source_state = xr::sys::HandTrackingDataSourceStateEXT {
+                    ty: xr::sys::HandTrackingDataSourceStateEXT::TYPE,
+                    next: std::ptr::null_mut(),
+                    ..{ std::mem::zeroed() }
+                };
+                let mut locations =
+                    MaybeUninit::<[xr::HandJointLocation; xr::HAND_JOINT_COUNT]>::uninit();
+                let mut location_info = xr::sys::HandJointLocationsEXT {
+                    ty: xr::sys::HandJointLocationsEXT::TYPE,
+                    next: &mut source_state as *mut _ as _,
+                    is_active: false.into(),
+                    joint_count: xr::HAND_JOINT_COUNT as u32,
+                    joint_locations: locations.as_mut_ptr() as _,
+                };
+                let r =
+                    (ext.locate_hand_joints)(tracker.as_raw(), &locate_info, &mut location_info);
+                if r.into_raw() < 0 {
+                    return Err(r);
+                }
+                Ok(if location_info.is_active.into() {
+                    Some((locations.assume_init(), source_state.data_source))
+                } else {
+                    None
+                })
+            }
+        }
+
+        let r = if self.openxr.enabled_extensions.ext_hand_tracking_data_source {
+            get_joints_with_data_source(&raw, hand_tracker, display_time).unwrap()
+        } else {
+            raw.locate_hand_joints(hand_tracker, display_time)
+                .unwrap()
+                .map(|j| (j, xr::HandTrackingDataSourceEXT::UNOBSTRUCTED))
+        };
+        let Some((joints, data_source)) = r else {
             self.get_estimated_bones(session_data, space, hand, transforms);
             return;
         };
@@ -162,8 +210,11 @@ impl<C: openxr_data::Compositor> Input<C> {
             }
         }
 
-        self.skeletal_tracking_level.write().unwrap()[hand as usize - 1] =
-            vr::EVRSkeletalTrackingLevel::Full;
+        self.skeletal_tracking_level.write().unwrap()[hand as usize - 1] = match data_source {
+            xr::HandTrackingDataSourceEXT::CONTROLLER => vr::EVRSkeletalTrackingLevel::Partial,
+            xr::HandTrackingDataSourceEXT::UNOBSTRUCTED => vr::EVRSkeletalTrackingLevel::Full,
+            _ => unreachable!(),
+        };
     }
 
     pub(super) fn get_estimated_bones(
