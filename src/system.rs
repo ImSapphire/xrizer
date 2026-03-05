@@ -64,6 +64,47 @@ impl ViewCache {
         }
     }
 
+    // https://gitlab.freedesktop.org/monado/monado/-/blob/945807fa029b10451d60d74ca7aa5d41eb9ab5d6/src/xrt/auxiliary/math/m_optics.c#L164
+    fn adjust_fovs(fov: &mut xr::Fovf, view_orientation: &Quat) {
+        if view_orientation.is_near_identity() {
+            return;
+        }
+        let (tan_l, tan_r, tan_u, tan_d) = (
+            fov.angle_left.tan(),
+            fov.angle_right.tan(),
+            fov.angle_up.tan(),
+            fov.angle_down.tan(),
+        );
+        let (mut new_tan_l, mut new_tan_r, mut new_tan_u, mut new_tan_d) =
+            (f32::INFINITY, -f32::INFINITY, -f32::INFINITY, f32::INFINITY);
+        let frustum_corners = [
+            Vec3::from_array([tan_l, tan_u, -1.0]),
+            Vec3::from_array([tan_r, tan_u, -1.0]),
+            Vec3::from_array([tan_r, tan_d, -1.0]),
+            Vec3::from_array([tan_l, tan_d, -1.0]),
+        ];
+
+        for corner in frustum_corners {
+            let rotated_corner = view_orientation.mul_vec3(corner);
+            let distance = (-rotated_corner.z).max(f32::EPSILON);
+
+            let projected_corner_x = rotated_corner.x / distance;
+            let projected_corner_y = rotated_corner.y / distance;
+
+            new_tan_l = new_tan_l.min(projected_corner_x);
+            new_tan_r = new_tan_r.max(projected_corner_x);
+            new_tan_u = new_tan_u.min(projected_corner_y);
+            new_tan_d = new_tan_d.max(projected_corner_y);
+        }
+
+        *fov = xr::Fovf {
+            angle_left: new_tan_l.atan(),
+            angle_right: new_tan_r.atan(),
+            angle_up: new_tan_u.atan(),
+            angle_down: new_tan_d.atan(),
+        };
+    }
+
     fn get_views_view_space(session: &SessionData, display_time: xr::Time) -> ViewDataViewSpace {
         let (flags, mut views) = session
             .session
@@ -79,11 +120,12 @@ impl ViewCache {
             .map(
                 |xr::View {
                      pose: xr::Posef { orientation: o, .. },
-                     ..
+                     fov,
                  }| {
-                    let ret = Quat::from_xyzw(o.x, o.y, o.z, o.w).inverse();
+                    let q = Quat::from_xyzw(o.x, o.y, o.z, o.w);
                     *o = xr::Quaternionf::IDENTITY; // parallel views
-                    ret
+                    Self::adjust_fovs(fov, &q);
+                    q.inverse()
                 },
             )
             .collect::<Vec<_>>()
@@ -121,12 +163,13 @@ impl ViewCache {
                 pose: xr::Posef {
                     orientation: rot, ..
                 },
-                ..
+                fov,
             },
             view_rot,
         ) in views.iter_mut().zip(view_data_orientations_inverse)
         {
             let quat = Quat::from_xyzw(rot.x, rot.y, rot.z, rot.w);
+            Self::adjust_fovs(fov, &view_rot);
             // rotate the inverse of the view space view rotation by this space's
             // view orientation to remove the canting from the displays in this space
             let adjusted_rot = quat * view_rot;
