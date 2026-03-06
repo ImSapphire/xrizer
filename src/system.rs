@@ -67,6 +67,7 @@ impl ViewCache {
     // https://gitlab.freedesktop.org/monado/monado/-/blob/945807fa029b10451d60d74ca7aa5d41eb9ab5d6/src/xrt/auxiliary/math/m_optics.c#L164
     fn adjust_fovs(fov: &mut xr::Fovf, view_orientation: &Quat) {
         if view_orientation.is_near_identity() {
+            log::debug!(target: "adjust_fovs", "Skipping adjust_fovs because orientation is already identity");
             return;
         }
         let (tan_l, tan_r, tan_u, tan_d) = (
@@ -97,12 +98,14 @@ impl ViewCache {
             new_tan_d = new_tan_d.min(projected_corner_y);
         }
 
-        *fov = xr::Fovf {
+        let new_fov = xr::Fovf {
             angle_left: new_tan_l.atan(),
             angle_right: new_tan_r.atan(),
             angle_up: new_tan_u.atan(),
             angle_down: new_tan_d.atan(),
         };
+        log::debug!(target: "adjust_fovs", "fov {:?} -> {:?}", *fov, new_fov);
+        *fov = new_fov;
     }
 
     fn get_views_view_space(session: &SessionData, display_time: xr::Time) -> ViewDataViewSpace {
@@ -123,8 +126,8 @@ impl ViewCache {
                      fov,
                  }| {
                     let q = Quat::from_xyzw(o.x, o.y, o.z, o.w);
-                    *o = xr::Quaternionf::IDENTITY; // parallel views
                     Self::adjust_fovs(fov, &q);
+                    *o = xr::Quaternionf::IDENTITY; // parallel views
                     q.inverse()
                 },
             )
