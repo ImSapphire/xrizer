@@ -93,8 +93,8 @@ impl ViewCache {
 
             new_tan_l = new_tan_l.min(projected_corner_x);
             new_tan_r = new_tan_r.max(projected_corner_x);
-            new_tan_u = new_tan_u.min(projected_corner_y);
-            new_tan_d = new_tan_d.max(projected_corner_y);
+            new_tan_u = new_tan_u.max(projected_corner_y);
+            new_tan_d = new_tan_d.min(projected_corner_y);
         }
 
         *fov = xr::Fovf {
