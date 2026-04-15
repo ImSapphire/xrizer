@@ -22,6 +22,7 @@ impl InteractionProfile for SimpleController {
                 left: c"htc/vive_controllerLHR-00000001",
                 right: c"htc/vive_controllerLHR-00000002",
             },
+            input_profile_path: c"{htc}/input/vive_controller_profile.json",
             serial_number: Property::PerHand {
                 left: c"LHR-00000001",
                 right: c"LHR-00000002",

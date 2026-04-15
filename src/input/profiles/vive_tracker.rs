@@ -21,6 +21,7 @@ impl InteractionProfile for ViveTracker {
             render_model_name: Property::BothHands(c"vr_tracker_vive_3_0"),
             main_axis: MainAxisType::Thumbstick,
             registered_device_type: Property::BothHands(c"vive_tracker"),
+            input_profile_path: c"{htc}/input/vive_tracker_profile.json",
             serial_number: Property::BothHands(c"vive_tracker"), // This gets replaced
             tracking_system_name: c"lighthouse",
             manufacturer_name: c"HTC",

@@ -34,6 +34,7 @@ impl InteractionProfile for Knuckles {
                 left: c"valve/index_controllerLHR-FFFFFFF1",
                 right: c"valve/index_controllerLHR-FFFFFFF2",
             },
+            input_profile_path: c"{indexcontroller}/input/index_controller_profile.json",
             serial_number: Property::PerHand {
                 left: c"LHR-FFFFFFF1",
                 right: c"LHR-FFFFFFF2",

@@ -26,6 +26,7 @@ impl InteractionProfile for Touch {
                 left: c"oculus/WMHD315M3010GV_Controller_Left",
                 right: c"oculus/WMHD315M3010GV_Controller_Right",
             },
+            input_profile_path: c"{oculus}/input/touch_profile.json",
             serial_number: Property::PerHand {
                 left: c"WMHD315M3010GV_Controller_Left",
                 right: c"WMHD315M3010GV_Controller_Right",

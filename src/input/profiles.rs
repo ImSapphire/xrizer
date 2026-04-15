@@ -67,6 +67,8 @@ pub struct ProfileProperties {
     pub main_axis: MainAxisType,
     /// Corresponds to Prop_RegisteredDeviceType_String
     pub registered_device_type: Property<&'static CStr>,
+    /// Corresponds to Prop_InputProfilePath_String
+    pub input_profile_path: &'static CStr,
     /// Corresponds to Prop_SerialNumber_String
     pub serial_number: Property<&'static CStr>,
     /// Corresponds to Prop_TrackingSystemName_String

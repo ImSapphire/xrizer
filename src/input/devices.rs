@@ -235,6 +235,7 @@ impl TrackedDevice {
             vr::ETrackedDeviceProperty::RegisteredDeviceType_String => {
                 Some(*data.registered_device_type.get(hand))
             }
+            vr::ETrackedDeviceProperty::InputProfilePath_String => Some(data.input_profile_path),
             vr::ETrackedDeviceProperty::TrackingSystemName_String => {
                 Some(data.tracking_system_name)
             }

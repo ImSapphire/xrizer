@@ -22,6 +22,8 @@ impl InteractionProfile for ViveFocus3 {
             registered_device_type: Property::BothHands(
                 c"htc_business_streaming/vive_focus3_controller",
             ),
+            input_profile_path:
+                c"{htc_business_streaming}/input/vive_focus3_controller_profile.json",
             serial_number: Property::PerHand {
                 left: c"CTL_LEFT",
                 right: c"CTL_RIGHT",
