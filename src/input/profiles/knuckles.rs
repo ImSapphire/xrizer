@@ -53,6 +53,20 @@ impl InteractionProfile for Knuckles {
         };
         &DEVICE_PROPERTIES
     }
+    fn hmd_properties(&self) -> &'static ProfileProperties {
+        &ProfileProperties {
+            model: Property::BothHands(c"Index"),
+            openvr_controller_type: c"indexhmd",
+            render_model_name: Property::BothHands(c"generic_hmd"),
+            main_axis: MainAxisType::Trackpad, // doesn't exist for Index, so whatever
+            registered_device_type: Property::BothHands(c"valve/index"),
+            input_profile_path: c"{indexhmd}/input/indexhmd_profile.json",
+            serial_number: Property::BothHands(c"LHR-FFFFFFFF"),
+            tracking_system_name: c"lighthouse",
+            manufacturer_name: c"Valve",
+            legacy_buttons_mask: 0,
+        }
+    }
     fn translate_map(&self) -> &'static [PathTranslation] {
         &[
             PathTranslation {

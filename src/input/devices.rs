@@ -214,12 +214,12 @@ impl TrackedDevice {
     }
 
     fn get_string_property(&self, property: vr::ETrackedDeviceProperty) -> Option<&CStr> {
-        let hand = match self.device_type {
-            TrackedDeviceType::Controller { hand, .. } => hand,
-            _ => Hand::Left,
+        let hand = self.get_controller_hand().unwrap_or(Hand::Left);
+        let profile = self.interaction_profile?;
+        let data = match self.device_type {
+            TrackedDeviceType::Hmd => profile.hmd_properties(),
+            _ => profile.properties(),
         };
-
-        let data = self.interaction_profile?.properties();
 
         match property {
             // Audica likes to apply controller specific tweaks via this property
@@ -542,6 +542,7 @@ impl<C: openxr_data::Compositor> Input<C> {
     ) -> Option<CString> {
         let session_data = self.openxr.session_data.get();
         let devices = session_data.input_data.devices.read().unwrap();
+
         let device = devices.get_device(index)?;
 
         device.get_string_property(property).map(|s| s.to_owned())

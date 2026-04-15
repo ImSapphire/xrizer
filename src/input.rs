@@ -15,6 +15,7 @@ use devices::{SubactionPaths, TrackedDevice, TrackedDeviceList};
 use skeletal::FingerState;
 use skeletal::SkeletalInputActionData;
 
+use crate::input::profiles::simple_controller::SimpleController;
 use crate::{
     AtomicF32,
     openxr_data::{self, Hand, OpenXrData, SessionData},
@@ -1407,6 +1408,16 @@ impl<C: openxr_data::Compositor> Input<C> {
                 panic!("Failed to create new controller: {:?}", e);
             });
         }
+
+        let hmd_profile = devices
+            .get_controller(Hand::Left)
+            .or_else(|| devices.get_controller(Hand::Right))
+            .and_then(|d| d.interaction_profile)
+            .or_else(|| Some(&SimpleController));
+        let hmd = devices
+            .get_device_mut(vr::k_unTrackedDeviceIndex_Hmd)
+            .unwrap();
+        hmd.interaction_profile = hmd_profile;
 
         #[cfg(feature = "monado")]
         devices

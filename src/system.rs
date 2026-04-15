@@ -539,8 +539,10 @@ impl vr::IVRSystem023_Interface for System {
             &mut []
         };
 
-        let data = match device_index {
-            vr::k_unTrackedDeviceIndex_Hmd => match prop {
+        let data = if let Some(input) = self.input.get() {
+            input.get_device_string_tracked_property(device_index, prop)
+        } else {
+            match prop {
                 // The Unity OpenVR sample appears to have a hard requirement on these first three properties returning
                 // something to even get the game to recognize the HMD's location. However, the value
                 // itself doesn't appear to be that important.
@@ -550,11 +552,7 @@ impl vr::IVRSystem023_Interface for System {
                     Some(CString::new("<unknown>").unwrap())
                 }
                 _ => None,
-            },
-            _ => self
-                .input
-                .get()
-                .and_then(|input| input.get_device_string_tracked_property(device_index, prop)),
+            }
         };
 
         let Some(data) = data else {

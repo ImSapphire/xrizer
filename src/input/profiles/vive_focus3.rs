@@ -44,6 +44,20 @@ impl InteractionProfile for ViveFocus3 {
         };
         &DEVICE_PROPERTIES
     }
+    fn hmd_properties(&self) -> &'static ProfileProperties {
+        &ProfileProperties {
+            model: Property::BothHands(c"Vive VBStreaming Focus3"),
+            openvr_controller_type: c"vive_cosmos",
+            render_model_name: Property::BothHands(c"generic_hmd"),
+            main_axis: MainAxisType::Thumbstick, // doesn't exist for HMD
+            registered_device_type: Property::BothHands(c"htc_business_streaming/vive_focus3"), // guessed
+            input_profile_path: c"{htc_business_streaming}/input/vive_focus3_profile.json",
+            serial_number: Property::BothHands(c"FOCUS3"),
+            tracking_system_name: c"vive_eyes",
+            manufacturer_name: c"htc_rr",
+            legacy_buttons_mask: 0,
+        }
+    }
     fn profile_path(&self) -> &'static str {
         "/interaction_profiles/htc/vive_focus3_controller"
     }

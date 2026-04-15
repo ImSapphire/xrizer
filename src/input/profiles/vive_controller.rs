@@ -32,6 +32,20 @@ impl InteractionProfile for ViveWands {
         };
         &DEVICE_PROPERTIES
     }
+    fn hmd_properties(&self) -> &'static ProfileProperties {
+        &ProfileProperties {
+            model: Property::BothHands(c"Vive"),
+            openvr_controller_type: c"vive",
+            render_model_name: Property::BothHands(c"generic_hmd"),
+            main_axis: MainAxisType::Thumbstick, // doesn't exist for HMD
+            registered_device_type: Property::BothHands(c"htc/vive"),
+            input_profile_path: c"{htc}/input/vive_profile.json",
+            serial_number: Property::BothHands(c"LHR-00000000"),
+            tracking_system_name: c"Lighthouse",
+            manufacturer_name: c"HTC",
+            legacy_buttons_mask: 0,
+        }
+    }
     fn profile_path(&self) -> &'static str {
         "/interaction_profiles/htc/vive_controller"
     }

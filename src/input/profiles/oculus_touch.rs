@@ -46,6 +46,20 @@ impl InteractionProfile for Touch {
         };
         &DEVICE_PROPERTIES
     }
+    fn hmd_properties(&self) -> &'static ProfileProperties {
+        &ProfileProperties {
+            model: Property::BothHands(c"Oculus Quest2"),
+            openvr_controller_type: c"rift",
+            render_model_name: Property::BothHands(c"generic_hmd"),
+            main_axis: MainAxisType::Thumbstick, // doesn't exist for HMD
+            registered_device_type: Property::BothHands(c"oculus/WMHD315M3010GV"),
+            input_profile_path: c"{oculus}/input/rift_profile.json",
+            serial_number: Property::BothHands(c"WMHD315M3010GV"),
+            tracking_system_name: c"oculus",
+            manufacturer_name: c"Oculus",
+            legacy_buttons_mask: 0,
+        }
+    }
     fn profile_path(&self) -> &'static str {
         "/interaction_profiles/oculus/touch_controller"
     }

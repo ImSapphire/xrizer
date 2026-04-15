@@ -30,6 +30,10 @@ impl InteractionProfile for ViveTracker {
 
         &DEVICE_PROPERTIES
     }
+    // This should never be called for this profile.
+    fn hmd_properties(&self) -> &'static ProfileProperties {
+        unreachable!()
+    }
     fn translate_map(&self) -> &'static [PathTranslation] {
         &[]
     }

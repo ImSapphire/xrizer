@@ -23,6 +23,7 @@ pub trait InteractionProfile: Sync + Send {
     fn profile_path(&self) -> &'static str;
     fn has_required_extensions(&self, enabled_extensions: &xr::ExtensionSet) -> bool;
     fn properties(&self) -> &'static ProfileProperties;
+    fn hmd_properties(&self) -> &'static ProfileProperties;
     fn translate_map(&self) -> &'static [PathTranslation];
 
     fn legal_paths(&self) -> Box<[String]>;
